@@ -4,44 +4,45 @@ import * as THREE from 'three';
 /**
  * Logo3D
  * Renders the brand logo as an interactive 3D mesh for the scene.
- * Allows the user to rotate and zoom around the logo.
  */
-export default function Logo3DFooter({ style, color = '#2d3d1a', highlightColor = '#b7c25e' }: { style?: React.CSSProperties, color?: string, highlightColor?: string }) {
+export default function Logo3DFooter({
+    style,
+    color = '#2d3d1a',
+    highlightColor = '#b7c25e',
+    isStatic = false,
+    rotationY = 0.5
+}: {
+    style?: React.CSSProperties,
+    color?: string,
+    highlightColor?: string,
+    isStatic?: boolean,
+    rotationY?: number
+}) {
     const mountRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const mount = mountRef.current;
         if (!mount) return;
 
-        const W = mount.clientWidth || 400;
-        const H = mount.clientHeight || 400;
+        const W = mount.clientWidth || 200;
+        const H = mount.clientHeight || 200;
 
         /* ── Renderer ── */
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(W, H);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.shadowMap.enabled = true;
         mount.appendChild(renderer.domElement);
 
         /* ── Scene & camera ── */
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(38, W / H, 0.1, 100);
-        camera.position.set(0, 0.2, 5.8);
+        const camera = new THREE.PerspectiveCamera(35, W / H, 0.1, 100);
+        camera.position.set(0, 0, 5.5);
 
         /* ── Lighting ── */
-        scene.add(new THREE.AmbientLight(0xffffff, 0.45));
-
-        const key = new THREE.DirectionalLight(0xffffff, 3.0);
-        key.position.set(4, 6, 5);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const key = new THREE.DirectionalLight(0xffffff, 2.5);
+        key.position.set(5, 5, 5);
         scene.add(key);
-
-        const fill = new THREE.DirectionalLight(0xffffff, 1.2);
-        fill.position.set(-5, -2, 4);
-        scene.add(fill);
-
-        const rim = new THREE.DirectionalLight(0xaaaaaa, 0.8);
-        rim.position.set(0, -6, -3);
-        scene.add(rim);
 
         /* ── Petal shape ── */
         const ps = new THREE.Shape();
@@ -50,33 +51,33 @@ export default function Logo3DFooter({ style, color = '#2d3d1a', highlightColor 
         ps.bezierCurveTo(-0.52, 0.72, -0.44, 0.16, 0, 0);
 
         const petalGeo = new THREE.ExtrudeGeometry(ps, {
-            depth: 0.28,
+            depth: 0.25,
             bevelEnabled: true,
-            bevelThickness: 0.07,
-            bevelSize: 0.04,
-            bevelSegments: 24,
-            curveSegments: 64,
+            bevelThickness: 0.05,
+            bevelSize: 0.03,
+            bevelSegments: 12,
+            curveSegments: 32,
         });
 
         petalGeo.computeBoundingBox();
         const bb = petalGeo.boundingBox;
         if (bb) {
-            petalGeo.translate(-(bb.max.x + bb.min.x) / 2, 0, -0.14);
+            petalGeo.translate(-(bb.max.x + bb.min.x) / 2, 0, -0.12);
         }
 
         /* ── Materials ── */
         const mat = new THREE.MeshStandardMaterial({
             color: new THREE.Color(color),
-            metalness: 0.6,
-            roughness: 0.45,
+            metalness: 0.5,
+            roughness: 0.4,
         });
 
         const matHighlight = new THREE.MeshStandardMaterial({
             color: new THREE.Color(highlightColor),
-            metalness: 0.9,
-            roughness: 0.15,
+            metalness: 0.8,
+            roughness: 0.2,
             transparent: true,
-            opacity: 0.4,
+            opacity: 0.3,
             blending: THREE.AdditiveBlending,
         });
 
@@ -90,32 +91,22 @@ export default function Logo3DFooter({ style, color = '#2d3d1a', highlightColor 
             logo.add(highlight);
         }
 
-        const sphereGeo = new THREE.SphereGeometry(0.12, 24, 24);
-        const sphereMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, metalness: 0.9, roughness: 0.1 });
+        const sphereGeo = new THREE.SphereGeometry(0.12, 16, 16);
+        const sphereMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, metalness: 0.8, roughness: 0.2 });
         logo.add(new THREE.Mesh(sphereGeo, sphereMat));
 
-        // Tilt forward to show depth like the original 3D logo
-        logo.rotation.x = 0.28;
+        logo.rotation.y = rotationY;
+        logo.rotation.x = isStatic ? 0 : 0.2; // Front-on for static logo
         scene.add(logo);
-
-        const gleamLight = new THREE.PointLight(0xffffff, 8.0, 15);
-        scene.add(gleamLight);
 
         /* ── Animation loop ── */
         let rafId: number;
         const tick = () => {
-            rafId = requestAnimationFrame(tick);
-
-            // Continuously rotate like the main logo
-            logo.rotation.y += 0.010;
-
-            // Rotate the light around the logo for a sweeping glint effect
-            const time = Date.now() * 0.0015;
-            gleamLight.position.x = Math.sin(time) * 4;
-            gleamLight.position.y = Math.cos(time) * 2;
-            gleamLight.position.z = Math.cos(time) * 4 + 2;
-
+            if (!isStatic) {
+                logo.rotation.y += 0.01;
+            }
             renderer.render(scene, camera);
+            rafId = requestAnimationFrame(tick);
         };
         tick();
 
@@ -123,9 +114,11 @@ export default function Logo3DFooter({ style, color = '#2d3d1a', highlightColor 
         const onResize = () => {
             const w = mount.clientWidth;
             const h = mount.clientHeight;
-            camera.aspect = w / h;
-            camera.updateProjectionMatrix();
-            renderer.setSize(w, h);
+            if (w && h) {
+                camera.aspect = w / h;
+                camera.updateProjectionMatrix();
+                renderer.setSize(w, h);
+            }
         };
         window.addEventListener('resize', onResize);
 
@@ -135,7 +128,7 @@ export default function Logo3DFooter({ style, color = '#2d3d1a', highlightColor 
             renderer.dispose();
             if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
         };
-    }, [color, highlightColor]);
+    }, [color, highlightColor, isStatic, rotationY]);
 
     return (
         <div

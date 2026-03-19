@@ -18,8 +18,8 @@ import {
     ExternalLink,
     Terminal,
 } from 'lucide-react';
-import Logo3DFooter from './effects/Logo3DFooter';
 import { useAuth } from '../context/AuthContext';
+import SanjeevaniLogo from './SanjeevaniLogo';
 
 /* ─── Nav items ─────────────────────────────────────── */
 const NAV_MAIN = [
@@ -52,40 +52,21 @@ const Sidebar = () => {
             className="relative h-screen flex flex-col shrink-0 overflow-visible z-30 bg-white border-r border-gray-200"
         >
             {/* ── Logo + Brand ── */}
-            <div className="flex items-center h-[60px] px-3 gap-3 shrink-0 border-b border-gray-100">
+            <div className={`flex items-center h-[60px] shrink-0 border-b border-gray-100 overflow-hidden ${expanded ? 'px-4' : 'px-0 justify-center'}`}>
                 <div
-                    className="shrink-0 rounded-xl overflow-hidden"
                     style={{
-                        width: 40,
-                        height: 40,
-                        minWidth: 40,
-                        background: 'linear-gradient(135deg,#e8f5e9 0%,#f0faf3 100%)',
+                        width: expanded ? 160 : 36,
+                        transition: 'width 0.28s cubic-bezier(0.4,0,0.2,1)',
                     }}
+                    className="flex items-center justify-center"
                 >
-                    <Logo3DFooter
-                        color="#0a2e2a"
-                        highlightColor="#bbed3b"
-                        style={{ width: '100%', height: '100%' }}
+                    <SanjeevaniLogo
+                        iconColor="#000000"
+                        iconAccent="#d4ed66"
+                        textColor="#000000"
+                        width={expanded ? 160 : 36}
+                        height={expanded ? 32 : 26}
                     />
-                </div>
-
-                {/* Brand text */}
-                <div
-                    className="overflow-hidden flex flex-col justify-center"
-                    style={{
-                        opacity: expanded ? 1 : 0,
-                        maxWidth: expanded ? 160 : 0,
-                        width: 160,
-                        transition: 'opacity 0.18s ease, max-width 0.28s cubic-bezier(0.4,0,0.2,1)',
-                        whiteSpace: 'nowrap',
-                    }}
-                >
-                    <span className="text-[13px] font-extrabold text-gray-900 leading-tight tracking-tight">
-                        SanjeevaniRx<span className="text-[#16a34a]">AI</span>
-                    </span>
-                    <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-[0.15em]">
-                        Pharmacy OS
-                    </span>
                 </div>
             </div>
 

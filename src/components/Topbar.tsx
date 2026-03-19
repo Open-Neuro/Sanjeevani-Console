@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { Settings, Bell, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import SanjeevaniLogo from './SanjeevaniLogo';
 
 const Topbar = () => {
     const { user } = useAuth();
@@ -19,10 +20,8 @@ const Topbar = () => {
             {/* Logo and Right Icons Row on Mobile */}
             <div className="flex items-center justify-between w-full md:w-auto">
                 {/* Logo area */}
-                <div className="flex items-center group">
-                    <div className="px-4 py-1 bg-transparent border border-gray-300 rounded-full flex items-center justify-center transition-colors group-hover:bg-gray-50">
-                        <span className="text-[15px] font-medium tracking-wide text-gray-800">SanjeevaniRxAI</span>
-                    </div>
+                <div className="flex items-center group px-4">
+                    <SanjeevaniLogo iconColor="#000000" iconAccent="#d4ed66" textColor="#000000" width={140} height={28} />
                 </div>
 
                 {/* Right Icons (Visible on mobile header row) */}
