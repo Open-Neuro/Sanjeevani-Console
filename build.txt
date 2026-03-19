@@ -1,0 +1,9 @@
+src/components/Header.tsx(2,18): error TS6133: 'Bell' is declared but its value is never read.
+src/components/Header.tsx(2,24): error TS6133: 'ChevronDown' is declared but its value is never read.
+src/components/ProductTable.tsx(1,18): error TS6133: 'Plus' is declared but its value is never read.
+src/components/ProductTable.tsx(1,24): error TS6133: 'SlidersHorizontal' is declared but its value is never read.
+src/components/Sidebar.tsx(9,5): error TS6133: 'LogOut' is declared but its value is never read.
+src/pages/AIInsights.tsx(3,70): error TS6133: 'CheckCircle' is declared but its value is never read.
+src/pages/AIInsights.tsx(4,86): error TS6133: 'BarChart' is declared but its value is never read.
+src/pages/AIInsights.tsx(4,96): error TS6133: 'Bar' is declared but its value is never read.
+src/pages/AIInsights.tsx(4,101): error TS6133: 'Legend' is declared but its value is never read.
