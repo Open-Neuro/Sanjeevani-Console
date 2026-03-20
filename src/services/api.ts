@@ -67,7 +67,19 @@ export const fetchProducts = async (page = 1, pageSize = 20, search = '', catego
     return response.json();
 };
 
-export const addProduct = async (product: { medicine_name: string; category?: string; stock?: number; generic_name?: string; brand_name?: string }) => {
+export const addProduct = async (product: {
+    medicine_name: string;
+    category?: string;
+    stock?: number;
+    generic_name?: string;
+    brand_name?: string;
+    batch_no?: string;
+    expiry_date?: string;
+    mrp?: number;
+    selling_price?: number;
+    schedule?: string;
+    prescription_required?: boolean;
+}) => {
     const response = await fetch(`${API_BASE_URL}/products/`, {
         method: 'POST',
         headers: {
@@ -76,6 +88,18 @@ export const addProduct = async (product: { medicine_name: string; category?: st
         body: JSON.stringify(product),
     });
     if (!response.ok) throw new Error('Failed to add product');
+    return response.json();
+};
+
+export const bulkAddProducts = async (products: any[]) => {
+    const response = await fetch(`${API_BASE_URL}/products/bulk`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(products),
+    });
+    if (!response.ok) throw new Error('Failed to bulk add products');
     return response.json();
 };
 
