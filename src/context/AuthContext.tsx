@@ -81,9 +81,17 @@ const AuthLoadingScreen = () => (
 );
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-    const [user, setUser] = useState<UserProfile | null>(null);
+    const [user, setUser] = useState<UserProfile | null>(() => {
+        const cachedUser = localStorage.getItem('sanjeevani_user');
+        try {
+            return cachedUser ? JSON.parse(cachedUser) : null;
+        } catch (e) {
+            console.error("AuthProvider: Failed to parse cached user", e);
+            return null;
+        }
+    });
     const [token, setToken] = useState<string | null>(localStorage.getItem('sanjeevani_token'));
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!user || !token);
 
     const fetchProfile = useCallback(async (authToken: string) => {
         console.log("AuthProvider: Fetching profile...");
@@ -100,6 +108,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 const finalUser = userData.user || userData;
                 console.log("AuthProvider: Profile fetched:", finalUser.email);
                 setUser(finalUser);
+                localStorage.setItem('sanjeevani_user', JSON.stringify(finalUser));
                 return finalUser;
             } else if (response.status === 401 || response.status === 403 || response.status === 404) {
                 console.warn(`AuthProvider: Session invalid or user not found (${response.status}). Clearing.`);
@@ -120,7 +129,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setLoading(false);
         };
         initAuth();
-    }, []);
+    }, [token, fetchProfile]);
 
     const login = async (newToken: string, profile: UserProfile) => {
         console.log("AuthProvider: Login triggered");
@@ -129,6 +138,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         if (profile && Object.keys(profile).length > 0) {
             setUser(profile);
+            localStorage.setItem('sanjeevani_user', JSON.stringify(profile));
             setLoading(false);
         } else {
             setLoading(true);
@@ -138,12 +148,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const updateUser = (data: Partial<UserProfile>) => {
-        setUser(prev => prev ? { ...prev, ...data } : null);
+        setUser(prev => {
+            const newUser = prev ? { ...prev, ...data } : null;
+            if (newUser) {
+                localStorage.setItem('sanjeevani_user', JSON.stringify(newUser));
+            }
+            return newUser;
+        });
     };
 
     const logout = () => {
         console.log("AuthProvider: Logging out...");
         localStorage.removeItem('sanjeevani_token');
+        localStorage.removeItem('sanjeevani_user');
         setToken(null);
         setUser(null);
         setTimeout(() => {
