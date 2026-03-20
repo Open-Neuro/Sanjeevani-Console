@@ -10,7 +10,7 @@ const ProductTable = () => {
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
     const [search, setSearch] = useState('');
-    const [category, setCategory] = useState('');
+    const [category] = useState('');
     const [filterStatus, setFilterStatus] = useState<'all' | 'low_stock' | 'expiring'>('all');
 
     // Add product modal state

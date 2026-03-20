@@ -283,14 +283,20 @@ const S: Record<string, CSSProperties> = {
 // ══════════════════════════════════════════════════════
 export default function SignUp() {
     const navigate = useNavigate();
-    const { user, token, login } = useAuth();
+    const { user, token } = useAuth();
     const [currentSlide, setCurrentSlide] = useState(0);
     const [fadeIn, setFadeIn] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
 
     // Redirect if already logged in
     useEffect(() => {
-        if (user || token) navigate("/dashboard");
+        if (user || token) {
+            if (user?.pharmacy_name) {
+                navigate("/dashboard");
+            } else {
+                navigate("/onboarding");
+            }
+        }
     }, [user, token, navigate]);
 
     // Auto-advance slider
@@ -307,19 +313,11 @@ export default function SignUp() {
 
     const handleGoogleLogin = () => {
         setIsLoading(true);
-        
-        // Mocking a successful login for rapid development
-        setTimeout(() => {
-            login("dummy-developer-token", {
-                id: "dev-123",
-                name: "Developer Guest",
-                email: "dev@sanjeevani.ai",
-                picture: "https://api.dicebear.com/7.x/avataaars/svg?seed=dev",
-                provider: "google"
-            });
-            setIsLoading(false);
-            navigate("/dashboard");
-        }, 800);
+        const appId = "dashboard";
+        const role = "user";
+        // Redirect to the real Sanjeevani Auth service
+        const authBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'https://sanjeevani-auth.onrender.com';
+        window.location.href = `${authBaseUrl}/auth/google/login?app_id=${appId}&requested_role=${role}`;
     };
 
     const slide = SLIDES[currentSlide];

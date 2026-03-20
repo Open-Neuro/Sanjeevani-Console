@@ -9,6 +9,7 @@ import Payments from './pages/Payments';
 import SignUp from './pages/SignUp';
 import AIInsights from './pages/AIInsights';
 import AuthCallback from './pages/AuthCallback';
+import Onboarding from './pages/Onboarding';
 import MainLayout from './components/MainLayout';
 import { AuthProvider } from './context/AuthContext';
 
@@ -22,6 +23,8 @@ function App() {
             <Route path="/" element={<SignUp />} />
             <Route path="/login" element={<SignUp />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/dashboard/auth/callback" element={<AuthCallback />} />
+            <Route path="/onboarding" element={<Onboarding />} />
 
             {/* Protected Routes inside MainLayout */}
             <Route path="/dashboard" element={<MainLayout />}>

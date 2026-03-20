@@ -9,32 +9,18 @@ import {
     CheckCircle, Loader2, AlertCircle, X, Search
 } from 'lucide-react';
 import { fetchDashboardOverview, fetchRefillAlerts, fetchInventoryAlerts, fetchRecentOrders, fetchTimeSeries, fetchProducts } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 
 
 /* ─── Component ─────────────────────────────────────── */
 const Overview = () => {
-    // Load initial state from cache if available for "instant" feel
-    const [overview, setOverview] = useState<any>(() => {
-        const cached = localStorage.getItem('sanjeevani_overview_cache');
-        return cached ? JSON.parse(cached) : null;
-    });
-    const [refills, setRefills] = useState<any[]>(() => {
-        const cached = localStorage.getItem('sanjeevani_refills_cache');
-        return cached ? JSON.parse(cached) : [];
-    });
-    const [inventory, setInventory] = useState<any[]>(() => {
-        const cached = localStorage.getItem('sanjeevani_inventory_cache');
-        return cached ? JSON.parse(cached) : [];
-    });
-    const [orders, setOrders] = useState<any[]>(() => {
-        const cached = localStorage.getItem('sanjeevani_orders_cache');
-        return cached ? JSON.parse(cached) : [];
-    });
-    const [timeSeries, setTimeSeries] = useState<any[]>(() => {
-        const cached = localStorage.getItem('sanjeevani_timeseries_cache');
-        return cached ? JSON.parse(cached) : [];
-    });
+    const { user } = useAuth();
+    const [overview, setOverview] = useState<any>(null);
+    const [refills, setRefills] = useState<any[]>([]);
+    const [inventory, setInventory] = useState<any[]>([]);
+    const [orders, setOrders] = useState<any[]>([]);
+    const [timeSeries, setTimeSeries] = useState<any[]>([]);
 
     const [error, setError] = useState<string | null>(null);
 
@@ -102,27 +88,22 @@ const Overview = () => {
                 if (results[0].status === 'fulfilled') {
                     const data = results[0].value.data;
                     setOverview(data);
-                    localStorage.setItem('sanjeevani_overview_cache', JSON.stringify(data));
                 }
                 if (results[1].status === 'fulfilled') {
                     const data = results[1].value.data || [];
                     setRefills(data);
-                    localStorage.setItem('sanjeevani_refills_cache', JSON.stringify(data));
                 }
                 if (results[2].status === 'fulfilled') {
                     const data = results[2].value.data || [];
                     setInventory(data);
-                    localStorage.setItem('sanjeevani_inventory_cache', JSON.stringify(data));
                 }
                 if (results[3].status === 'fulfilled') {
                     const data = results[3].value.data || [];
                     setOrders(data);
-                    localStorage.setItem('sanjeevani_orders_cache', JSON.stringify(data));
                 }
                 if (results[4].status === 'fulfilled') {
                     const data = results[4].value.data || [];
                     setTimeSeries(data);
-                    localStorage.setItem('sanjeevani_timeseries_cache', JSON.stringify(data));
                 }
 
                 setError(null);
@@ -145,7 +126,7 @@ const Overview = () => {
                 <div className="flex items-center gap-3">
                     <div>
                         <h1 className="text-lg font-bold text-gray-900 leading-tight flex items-center gap-2">
-                            Welcome in, Sanjeevani
+                            Welcome in, {user?.pharmacy_name || user?.name || 'Sanjeevani'}
                         </h1>
                         {error && (
                             <div className="flex items-center gap-1.5 mt-1 text-red-500 text-[10px] font-semibold">

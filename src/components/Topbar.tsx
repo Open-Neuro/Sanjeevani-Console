@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import SanjeevaniLogo from './SanjeevaniLogo';
 
 const Topbar = () => {
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
     const navItems = [
         { label: 'Dashboard', path: '/dashboard' },
         { label: 'Products', path: '/dashboard/products' },
@@ -50,15 +50,12 @@ const Topbar = () => {
                         {/* Topbar Mobile Dropdown */}
                         <div id="topbar-mobile-dropdown" className="hidden absolute top-full right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-[100]">
                             <div className="px-4 py-3 border-b border-gray-100">
-                                <p className="text-sm font-medium text-gray-900 truncate">{user?.name || "User"}</p>
-                                <p className="text-xs text-gray-500 truncate">{user?.email || ""}</p>
+                                <p className="text-sm font-bold text-gray-900 truncate">{user?.pharmacy_name || user?.name || "User"}</p>
+                                <p className="text-xs text-gray-500 truncate">{user?.owner_name || user?.email || ""}</p>
                             </div>
                             <div className="py-1">
                                 <button
-                                    onClick={() => {
-                                        localStorage.removeItem('sanjeevani_token');
-                                        window.location.href = '/';
-                                    }}
+                                    onClick={logout}
                                     className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                                 >
                                     Sign out
@@ -113,15 +110,12 @@ const Topbar = () => {
                     {/* Topbar Desktop Dropdown */}
                     <div id="topbar-profile-dropdown" className="hidden absolute top-full right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-[100]">
                         <div className="px-4 py-3 border-b border-gray-100">
-                            <p className="text-sm font-medium text-gray-900 truncate">{user?.name || "User"}</p>
-                            <p className="text-xs text-gray-500 truncate">{user?.email || ""}</p>
+                            <p className="text-sm font-bold text-gray-900 truncate">{user?.pharmacy_name || user?.name || "User"}</p>
+                            <p className="text-xs text-gray-500 truncate">{user?.owner_name || user?.email || ""}</p>
                         </div>
                         <div className="py-1">
                             <button
-                                onClick={() => {
-                                    localStorage.removeItem('sanjeevani_token');
-                                    window.location.href = '/';
-                                }}
+                                onClick={logout}
                                 className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                             >
                                 Sign out

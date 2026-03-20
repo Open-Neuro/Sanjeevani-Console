@@ -41,6 +41,10 @@ const Sidebar = () => {
     const [expanded, setExpanded] = useState(true);
     const [profileOpen, setProfileOpen] = useState(false);
     const { user, logout } = useAuth();
+    
+    // Rely exclusively on backend user object
+    const pharmacyName = user?.pharmacy_name || "Sanjeevani Admin";
+    const pharmacyOwner = user?.owner_name || user?.name || "admin@sanjeevani.ai";
 
     return (
         <div
@@ -175,8 +179,8 @@ const Sidebar = () => {
                             transition: 'opacity 0.16s ease, max-width 0.28s cubic-bezier(0.4,0,0.2,1)',
                         }}
                     >
-                        <p className="text-[12px] font-bold text-gray-800 leading-tight truncate">{user?.name || "Sanjeevani Admin"}</p>
-                        <p className="text-[10px] text-gray-500 leading-tight truncate">{user?.email || "admin@sanjeevanirx.ai"}</p>
+                        <p className="text-[12px] font-bold text-gray-800 leading-tight truncate">{pharmacyName}</p>
+                        <p className="text-[10px] text-gray-500 leading-tight truncate">{pharmacyOwner}</p>
                     </div>
                 </button>
 
@@ -199,11 +203,11 @@ const Sidebar = () => {
                                         className="rounded-full border-[3px] border-white/20 shadow-lg object-cover w-12 h-12"
                                     />
                                     <div className="text-white overflow-hidden">
-                                        <h3 className="font-bold text-sm truncate">{user?.name || "Sanjeevani Admin"}</h3>
-                                        <p className="text-[11px] text-gray-300 truncate">{user?.email || "admin@sanjeevanirx.ai"}</p>
+                                        <h3 className="font-bold text-sm truncate">{pharmacyName}</h3>
+                                        <p className="text-[11px] text-gray-300 truncate">{pharmacyOwner}</p>
                                         <div className="mt-1 flex items-center gap-1.5">
-                                            <span className="bg-[#bbed3b] text-[#0a2e2a] text-[9px] px-1.5 py-0.5 rounded font-black uppercase tracking-widest">PRO</span>
-                                            <span className="text-[9px] font-medium text-gray-400 font-mono tracking-tight">ID: {user?.id?.slice(0, 8) || "S-55928XA"}</span>
+                                            <span className="bg-[#bbed3b] text-[#0a2e2a] text-[9px] px-1.5 py-0.5 rounded font-black uppercase tracking-widest">{user?.subscription_plan || "PRO"}</span>
+                                            <span className="text-[9px] font-medium text-gray-400 font-mono tracking-tight">{user?.pharmacy_name ? `Verified Store` : `ID: ${user?.id?.slice(0, 8) || "S-55928XA"}`}</span>
                                         </div>
                                     </div>
                                 </div>

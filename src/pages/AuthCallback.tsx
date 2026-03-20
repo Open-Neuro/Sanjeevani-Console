@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const AuthCallback = () => {
     const navigate = useNavigate();
+    const { login } = useAuth();
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -33,11 +35,12 @@ const AuthCallback = () => {
                 }
 
                 if (token) {
-                    // Store token
-                    localStorage.setItem('sanjeevani_token', token);
+                    // Store token and trigger context update
+                    // Note: AuthContext will fetch the real profile once it sees the token
+                    login(token, {}); 
                     
-                    // Redirect to dashboard
-                    navigate('/dashboard', { replace: true });
+                    // Redirect to root, where SignUp will handle the logic
+                    navigate('/', { replace: true });
                 } else {
                     // No token found, redirect to login
                     setError('Authentication failed. No token received.');

@@ -1,7 +1,6 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 
-// Define the shape of our User data based on what the backend provides
 export interface UserProfile {
     id?: string;
     name?: string;
@@ -9,6 +8,17 @@ export interface UserProfile {
     picture?: string;
     provider?: string;
     role?: string;
+    global_role?: string;
+    subscription_plan?: string;
+    
+    // Pharmacy Details
+    pharmacy_name?: string;
+    owner_name?: string;
+    license_number?: string;
+    store_type?: string;
+    phone_number?: string;
+    address?: string;
+    
     [key: string]: any;
 }
 
@@ -17,19 +27,18 @@ interface AuthContextType {
     token: string | null;
     login: (token: string, profile: UserProfile) => void;
     logout: () => void;
+    updateUser: (data: Partial<UserProfile>) => void;
     loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Helper: fetch with a timeout so Render.com cold starts don't hang forever
-const fetchWithTimeout = (url: string, options: RequestInit, timeoutMs = 5000) => {
+const fetchWithTimeout = (url: string, options: RequestInit, timeoutMs = 8000) => {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
     return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(id));
 };
 
-// Loading spinner shown while auth state is resolving
 const AuthLoadingScreen = () => (
     <div style={{
         position: 'fixed', inset: 0, zIndex: 9999,
@@ -37,7 +46,6 @@ const AuthLoadingScreen = () => (
         alignItems: 'center', justifyContent: 'center',
         background: 'linear-gradient(135deg, #0C3831 0%, #0f5145 100%)',
     }}>
-        {/* Animated logo mark */}
         <div style={{
             width: 72, height: 72, borderRadius: '50%',
             background: 'linear-gradient(135deg, #d4ed66, #16a34a)',
@@ -48,29 +56,17 @@ const AuthLoadingScreen = () => (
         }}>
             <span style={{ fontSize: 28, fontWeight: 900, color: '#0C3831', letterSpacing: -1 }}>Rx</span>
         </div>
-
-        {/* Brand name */}
-        <p style={{
-            color: '#ffffff', fontSize: 20, fontWeight: 700,
-            letterSpacing: 1, marginBottom: 6, fontFamily: 'system-ui, sans-serif'
-        }}>SanjeevaniRxAI</p>
-        <p style={{
-            color: 'rgba(255,255,255,0.45)', fontSize: 13,
-            fontFamily: 'system-ui, sans-serif', fontWeight: 500
-        }}>Loading your workspace…</p>
-
-        {/* Animated dots */}
+        <p style={{ color: '#ffffff', fontSize: 20, fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>SanjeevaniRxAI</p>
+        <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>Synchronizing user data...</p>
         <div style={{ display: 'flex', gap: 8, marginTop: 32 }}>
             {[0, 1, 2].map(i => (
                 <span key={i} style={{
                     width: 8, height: 8, borderRadius: '50%',
                     background: '#d4ed66',
-                    display: 'inline-block',
                     animation: `rxBounce 1.2s ease-in-out ${i * 0.2}s infinite`,
                 }} />
             ))}
         </div>
-
         <style>{`
             @keyframes rxPulse {
                 0%, 100% { transform: scale(1); box-shadow: 0 0 40px rgba(212,237,102,0.35); }
@@ -86,91 +82,75 @@ const AuthLoadingScreen = () => (
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<UserProfile | null>(null);
-    const [token, setToken] = useState<string | null>(null);
+    const [token, setToken] = useState<string | null>(localStorage.getItem('sanjeevani_token'));
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const checkAuth = async () => {
-            let currentToken = localStorage.getItem('sanjeevani_token');
+    const fetchProfile = useCallback(async (authToken: string) => {
+        console.log("AuthProvider: Fetching profile...");
+        try {
+            const authBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'https://sanjeevani-auth.onrender.com';
+            const response = await fetchWithTimeout(
+                `${authBaseUrl}/auth/me`,
+                { headers: { 'Authorization': `Bearer ${authToken}` } },
+                8000
+            );
 
-            // 1. Check if token is in the URL (from Google OAuth callback)
-            const params = new URLSearchParams(window.location.search);
-            const urlToken = params.get('token');
-
-            if (urlToken) {
-                currentToken = urlToken;
-                localStorage.setItem('sanjeevani_token', urlToken);
-
-                // Clean the URL without reloading the page
-                window.history.replaceState({}, document.title, window.location.pathname);
+            if (response.ok) {
+                const userData = await response.json();
+                console.log("AuthProvider: Profile fetched:", userData.name || userData.email);
+                const finalUser = userData.user || userData;
+                setUser(finalUser);
+                return finalUser;
+            } else if (response.status === 401 || response.status === 403) {
+                console.warn("AuthProvider: Session invalid. Clearing.");
+                logout();
             }
-
-            // 2. If token exists, fetch current user profile (with 5s timeout)
-            if (currentToken) {
-                // BYPASS for development: if token is dummy, skip backend check
-                if (currentToken === "dummy-developer-token") {
-                    setToken(currentToken);
-                    setUser({
-                        id: "dev-123",
-                        name: "Developer Guest",
-                        email: "dev@sanjeevani.ai",
-                        picture: "https://api.dicebear.com/7.x/avataaars/svg?seed=dev",
-                        provider: "google"
-                    });
-                    setLoading(false);
-                    return;
-                }
-
-                setToken(currentToken);
-                try {
-                    const response = await fetchWithTimeout(
-                        'https://sanjeevanirxai-system.onrender.com/api/v1/auth/me',
-                        { headers: { 'Authorization': `Bearer ${currentToken}` } },
-                        5000
-                    );
-
-                    if (response.ok) {
-                        const userData = await response.json();
-                        setUser(userData.user || userData);
-                    } else {
-                        // Unauthorized or token expired, clear invalid session
-                        localStorage.removeItem('sanjeevani_token');
-                        setToken(null);
-                        setUser(null);
-                    }
-                } catch (e) {
-                    console.error("Failed to fetch user session (timeout or network error)", e);
-                    // On timeout/error, keep the token but don't block — redirect to login
-                    localStorage.removeItem('sanjeevani_token');
-                    setToken(null);
-                    setUser(null);
-                }
-            } else {
-                setToken(null);
-                setUser(null);
-            }
-
-            setLoading(false);
-        };
-
-        checkAuth();
+        } catch (e) {
+            console.error("AuthProvider: Profile fetch failed:", e);
+        }
+        return null;
     }, []);
 
-    const login = (newToken: string, profile: UserProfile) => {
-        setToken(newToken);
-        setUser(profile);
+    // Initial load
+    useEffect(() => {
+        const initAuth = async () => {
+            if (token) {
+                await fetchProfile(token);
+            }
+            setLoading(false);
+        };
+        initAuth();
+    }, []);
+
+    const login = async (newToken: string, profile: UserProfile) => {
+        console.log("AuthProvider: Login triggered");
         localStorage.setItem('sanjeevani_token', newToken);
+        setToken(newToken);
+        if (profile && Object.keys(profile).length > 0) {
+            setUser(profile);
+        } else {
+            await fetchProfile(newToken);
+        }
+    };
+
+    const updateUser = (data: Partial<UserProfile>) => {
+        setUser(prev => prev ? { ...prev, ...data } : null);
     };
 
     const logout = () => {
+        console.log("AuthProvider: Logging out...");
+        localStorage.removeItem('sanjeevani_token');
         setToken(null);
         setUser(null);
-        localStorage.removeItem('sanjeevani_token');
-        window.location.href = '/login';
+        setTimeout(() => {
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login';
+            }
+        }, 100);
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, login, logout, loading }}>
+        <AuthContext.Provider value={{ user, token, login, logout, updateUser, loading }}>
             {loading ? <AuthLoadingScreen /> : children}
         </AuthContext.Provider>
     );
