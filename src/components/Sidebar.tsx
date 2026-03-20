@@ -55,17 +55,17 @@ const Sidebar = () => {
             <div className={`flex items-center h-[60px] shrink-0 border-b border-gray-100 overflow-hidden ${expanded ? 'px-4' : 'px-0 justify-center'}`}>
                 <div
                     style={{
-                        width: expanded ? 160 : 36,
+                        width: expanded ? '100%' : 36,
                         transition: 'width 0.28s cubic-bezier(0.4,0,0.2,1)',
                     }}
-                    className="flex items-center justify-center"
+                    className={`flex items-center ${expanded ? 'justify-start' : 'justify-center'}`}
                 >
                     <SanjeevaniLogo
                         iconColor="#000000"
                         iconAccent="#d4ed66"
                         textColor="#000000"
-                        width={expanded ? 160 : 36}
-                        height={expanded ? 32 : 26}
+                        height={expanded ? 28 : 24} // Slightly smaller
+                        isExpanded={expanded}
                     />
                 </div>
             </div>

@@ -144,22 +144,6 @@ const Overview = () => {
         loadData();
     }, []);
 
-    if (loading) {
-        return (
-            <div className="flex-1 flex items-center justify-center h-screen bg-[#f4f7f6]">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="relative">
-                        <Loader2 className="animate-spin text-[#0a2e2a]" size={48} />
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-2 h-2 bg-[#bbed3b] rounded-full"></div>
-                        </div>
-                    </div>
-                    <p className="text-gray-600 font-bold tracking-tight">Initializing Sanjeevani Intelligence...</p>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="flex-1 flex flex-col h-screen overflow-hidden">
             {/* ── Top Welcome Bar ── */}
@@ -169,7 +153,6 @@ const Overview = () => {
                     <div>
                         <h1 className="text-lg font-bold text-gray-900 leading-tight flex items-center gap-2">
                             Welcome in, Sanjeevani
-                            {isRefreshing && <Loader2 size={12} className="animate-spin text-gray-400" />}
                         </h1>
                         {error && (
                             <div className="flex items-center gap-1.5 mt-1 text-red-500 text-[10px] font-semibold">

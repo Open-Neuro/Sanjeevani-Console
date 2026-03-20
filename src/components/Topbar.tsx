@@ -21,7 +21,7 @@ const Topbar = () => {
             <div className="flex items-center justify-between w-full md:w-auto">
                 {/* Logo area */}
                 <div className="flex items-center group px-4">
-                    <SanjeevaniLogo iconColor="#000000" iconAccent="#d4ed66" textColor="#000000" width={140} height={28} />
+                    <SanjeevaniLogo iconColor="#000000" iconAccent="#d4ed66" textColor="#000000" height={24} />
                 </div>
 
                 {/* Right Icons (Visible on mobile header row) */}

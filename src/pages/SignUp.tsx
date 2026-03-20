@@ -283,7 +283,7 @@ const S: Record<string, CSSProperties> = {
 // ══════════════════════════════════════════════════════
 export default function SignUp() {
     const navigate = useNavigate();
-    const { user, token } = useAuth();
+    const { user, token, login } = useAuth();
     const [currentSlide, setCurrentSlide] = useState(0);
     const [fadeIn, setFadeIn] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
@@ -307,34 +307,19 @@ export default function SignUp() {
 
     const handleGoogleLogin = () => {
         setIsLoading(true);
-        const width = 500, height = 600;
-        const left = window.screen.width / 2 - width / 2;
-        const top = window.screen.height / 2 - height / 2;
-
-        const popup = window.open(
-            "https://sanjeevanirxai-system.onrender.com/api/v1/auth/login",
-            "Google Sign In",
-            `width=${width},height=${height},left=${left},top=${top}`
-        );
-
-        const pollTimer = setInterval(() => {
-            try {
-                if (popup && popup.location.href.includes("/callback")) {
-                    const url = new URL(popup.location.href);
-                    const t = url.searchParams.get("token");
-                    if (t) {
-                        localStorage.setItem("sanjeevani_token", t);
-                        popup.close();
-                        clearInterval(pollTimer);
-                        navigate("/dashboard");
-                    }
-                }
-            } catch (_) { /* cross-origin – keep polling */ }
-            if (popup && popup.closed) {
-                clearInterval(pollTimer);
-                setIsLoading(false);
-            }
-        }, 500);
+        
+        // Mocking a successful login for rapid development
+        setTimeout(() => {
+            login("dummy-developer-token", {
+                id: "dev-123",
+                name: "Developer Guest",
+                email: "dev@sanjeevani.ai",
+                picture: "https://api.dicebear.com/7.x/avataaars/svg?seed=dev",
+                provider: "google"
+            });
+            setIsLoading(false);
+            navigate("/dashboard");
+        }, 800);
     };
 
     const slide = SLIDES[currentSlide];
@@ -399,9 +384,9 @@ export default function SignUp() {
                                 iconColor="#000000"
                                 iconAccent="#d4ed66"
                                 textColor="#000000"
-                                height={34}
-                                iconScale={1.2} // Matched branding
-                                textScale={1.2} // Matched branding
+                                height={30} // Slightly smaller
+                                iconScale={1.1}
+                                textScale={1.1}
                             />
                         </div>
                     </div>
@@ -469,7 +454,7 @@ export default function SignUp() {
                     {/* Divider */}
                     <div style={S.divider}>
                         <div style={S.divLine} />
-                        <span style={S.divText}>Sanjeevani AI &nbsp;·&nbsp; v2.0</span>
+                        <span style={S.divText}>Advanced Pharmacy Operating System</span>
                         <div style={S.divLine} />
                     </div>
 

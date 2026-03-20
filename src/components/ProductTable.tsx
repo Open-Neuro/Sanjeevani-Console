@@ -51,6 +51,11 @@ const ProductTable = () => {
         <div className="bg-white rounded-xl p-5 mx-8 mb-6 border border-gray-100 shadow-sm">
             {/* Toolbar */}
             <div className="flex justify-between items-center mb-6">
+                {loading && (
+                    <div className="absolute top-0 left-0 right-0 h-[2px] z-[100] overflow-hidden bg-transparent">
+                        <div className="h-full bg-[#bbed3b] animate-[progress_1.5s_ease-in-out_infinite]" style={{ width: '40%' }}></div>
+                    </div>
+                )}
                 <div className="flex items-center gap-4">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
@@ -91,10 +96,12 @@ const ProductTable = () => {
 
             {/* Table */}
             <div className="overflow-x-auto min-h-[400px]">
-                {loading ? (
+                {loading && products.length === 0 ? (
                     <div className="flex items-center justify-center h-[400px]">
                         <div className="flex flex-col items-center gap-3">
-                            <Loader2 className="animate-spin text-[#0a2e2a]" size={40} />
+                            <div className="p-4 bg-gray-50 rounded-full">
+                                <Loader2 className="animate-spin text-[#0a2e2a]" size={36} />
+                            </div>
                             <p className="text-sm font-semibold text-gray-400">Synchronizing Inventory...</p>
                         </div>
                     </div>
@@ -117,16 +124,13 @@ const ProductTable = () => {
                                 const stockPercent = Math.min((stock / maxStock) * 100, 100);
 
                                 let stockColor = "bg-green-500";
-                                let stockBg = "bg-green-50";
                                 let stockText = "text-green-700";
 
                                 if (stock === 0) {
                                     stockColor = "bg-red-500";
-                                    stockBg = "bg-red-50";
                                     stockText = "text-red-700";
                                 } else if (stock < 20) {
                                     stockColor = "bg-orange-500";
-                                    stockBg = "bg-orange-50";
                                     stockText = "text-orange-700";
                                 }
 

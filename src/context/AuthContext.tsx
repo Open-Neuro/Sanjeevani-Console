@@ -107,6 +107,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
             // 2. If token exists, fetch current user profile (with 5s timeout)
             if (currentToken) {
+                // BYPASS for development: if token is dummy, skip backend check
+                if (currentToken === "dummy-developer-token") {
+                    setToken(currentToken);
+                    setUser({
+                        id: "dev-123",
+                        name: "Developer Guest",
+                        email: "dev@sanjeevani.ai",
+                        picture: "https://api.dicebear.com/7.x/avataaars/svg?seed=dev",
+                        provider: "google"
+                    });
+                    setLoading(false);
+                    return;
+                }
+
                 setToken(currentToken);
                 try {
                     const response = await fetchWithTimeout(
