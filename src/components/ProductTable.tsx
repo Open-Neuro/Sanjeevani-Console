@@ -4,9 +4,8 @@ import { fetchProducts, addProduct } from '../services/api';
 
 const ProductTable = () => {
     const [products, setProducts] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
+    const [page, setPage] = useState(1);
     const [search, setSearch] = useState('');
     const [category] = useState('');
 
@@ -17,14 +16,11 @@ const ProductTable = () => {
 
     const loadProducts = async () => {
         try {
-            setLoading(true);
             const data = await fetchProducts(page, 10, search, category);
             setProducts(data.data || []);
             setTotal(data.total || 0);
         } catch (err) {
             console.error("Error fetching products:", err);
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -47,15 +43,11 @@ const ProductTable = () => {
             setIsSubmitting(false);
         }
     };
+
     return (
-        <div className="bg-white rounded-xl p-5 mx-8 mb-6 border border-gray-100 shadow-sm">
+        <div className="bg-white rounded-xl p-5 mx-8 mb-6 border border-gray-100 shadow-sm relative overflow-hidden">
             {/* Toolbar */}
             <div className="flex justify-between items-center mb-6">
-                {loading && (
-                    <div className="absolute top-0 left-0 right-0 h-[2px] z-[100] overflow-hidden bg-transparent">
-                        <div className="h-full bg-[#bbed3b] animate-[progress_1.5s_ease-in-out_infinite]" style={{ width: '40%' }}></div>
-                    </div>
-                )}
                 <div className="flex items-center gap-4">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
@@ -96,119 +88,108 @@ const ProductTable = () => {
 
             {/* Table */}
             <div className="overflow-x-auto min-h-[400px]">
-                {loading && products.length === 0 ? (
-                    <div className="flex items-center justify-center h-[400px]">
-                        <div className="flex flex-col items-center gap-3">
-                            <div className="p-4 bg-gray-50 rounded-full">
-                                <Loader2 className="animate-spin text-[#0a2e2a]" size={36} />
-                            </div>
-                            <p className="text-sm font-semibold text-gray-400">Synchronizing Inventory...</p>
-                        </div>
-                    </div>
-                ) : (
-                    <table className="w-full text-left border-separate border-spacing-y-2">
-                        <thead>
-                            <tr className="text-gray-400 text-[10px] uppercase tracking-[0.2em] font-black italic">
-                                <th className="py-3 px-6">Product Intelligence</th>
-                                <th className="py-3 px-4">Classification</th>
-                                <th className="py-3 px-4 w-48">Inventory Health</th>
-                                <th className="py-3 px-4">Generic Detail</th>
-                                <th className="py-3 px-4 text-center">Safety</th>
-                                <th className="py-3 px-4">Manufacturer</th>
-                            </tr>
-                        </thead>
-                        <tbody className="text-sm">
-                            {products.length > 0 ? products.map((prod, i) => {
-                                const stock = Number(prod["Current Stock"] || prod.Stock || 0);
-                                const maxStock = 200; // Reference for progress bar
-                                const stockPercent = Math.min((stock / maxStock) * 100, 100);
+                <table className="w-full text-left border-separate border-spacing-y-2">
+                    <thead>
+                        <tr className="text-gray-400 text-[10px] uppercase tracking-[0.2em] font-black italic">
+                            <th className="py-3 px-6">Product Intelligence</th>
+                            <th className="py-3 px-4">Classification</th>
+                            <th className="py-3 px-4 w-48">Inventory Health</th>
+                            <th className="py-3 px-4">Generic Detail</th>
+                            <th className="py-3 px-4 text-center">Safety</th>
+                            <th className="py-3 px-4">Manufacturer</th>
+                        </tr>
+                    </thead>
+                    <tbody className="text-sm">
+                        {products.length > 0 ? products.map((prod, i) => {
+                            const stock = Number(prod["Current Stock"] || prod.Stock || 0);
+                            const maxStock = 200; 
+                            const stockPercent = Math.min((stock / maxStock) * 100, 100);
 
-                                let stockColor = "bg-green-500";
-                                let stockText = "text-green-700";
+                            let stockColor = "bg-green-500";
+                            let stockText = "text-green-700";
 
-                                if (stock === 0) {
-                                    stockColor = "bg-red-500";
-                                    stockText = "text-red-700";
-                                } else if (stock < 20) {
-                                    stockColor = "bg-orange-500";
-                                    stockText = "text-orange-700";
-                                }
+                            if (stock === 0) {
+                                stockColor = "bg-red-500";
+                                stockText = "text-red-700";
+                            } else if (stock < 20) {
+                                stockColor = "bg-orange-500";
+                                stockText = "text-orange-700";
+                            }
 
-                                return (
-                                    <tr key={i} className="group bg-white hover:bg-[#fcfdfa] transition-all duration-300 shadow-sm border border-gray-100 rounded-xl overflow-hidden">
-                                        <td className="py-4 px-6 rounded-l-xl border-y border-l border-gray-100">
-                                            <div className="flex flex-col">
-                                                <span className="font-extrabold text-[#0a2e2a] text-base group-hover:text-[#16a34a] transition-colors">
-                                                    {prod["Medicine Name"]}
-                                                </span>
-                                                <span className="text-[10px] font-mono text-gray-400 uppercase tracking-tighter">
-                                                    ID: {prod["Product ID"] || "S-99212"}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="py-4 px-4 border-y border-gray-100">
-                                            <span className="px-2.5 py-1 bg-gray-50 text-gray-600 rounded-md text-[10px] font-bold uppercase tracking-wide border border-gray-100">
-                                                {prod.Category || "General"}
+                            return (
+                                <tr key={i} className="group bg-white hover:bg-[#fcfdfa] transition-all duration-300 shadow-sm border border-gray-100 rounded-xl overflow-hidden">
+                                    <td className="py-4 px-6 rounded-l-xl border-y border-l border-gray-100">
+                                        <div className="flex flex-col">
+                                            <span className="font-extrabold text-[#0a2e2a] text-base group-hover:text-[#16a34a] transition-colors">
+                                                {prod["Medicine Name"]}
                                             </span>
-                                        </td>
-                                        <td className="py-4 px-4 border-y border-gray-100">
-                                            <div className="flex flex-col gap-1.5">
-                                                <div className="flex justify-between items-end">
-                                                    <span className={`text-xs font-black ${stockText}`}>
-                                                        {stock} Units
-                                                    </span>
-                                                    <span className="text-[9px] text-gray-400 font-bold uppercase">
-                                                        {stock === 0 ? 'Out of Stock' : stock < 20 ? 'Critical' : 'Stable'}
-                                                    </span>
-                                                </div>
-                                                <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                                    <div
-                                                        className={`h-full ${stockColor} transition-all duration-1000 shadow-[0_0_8px_rgba(0,0,0,0.1)]`}
-                                                        style={{ width: `${stockPercent}%` }}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="py-4 px-4 border-y border-gray-100">
-                                            <span className="text-gray-500 italic text-xs font-medium block truncate max-w-[120px]" title={prod["Generic Name"]}>
-                                                {prod["Generic Name"] || "-"}
+                                            <span className="text-[10px] font-mono text-gray-400 uppercase tracking-tighter">
+                                                ID: {prod["Product ID"] || "S-99212"}
                                             </span>
-                                        </td>
-                                        <td className="py-4 px-4 border-y border-gray-100 text-center">
-                                            {prod.Category?.toLowerCase().includes('antibiotic') || prod.Category?.toLowerCase().includes('chronic') ? (
-                                                <div className="inline-flex flex-col items-center">
-                                                    <span className="bg-purple-600 text-white px-2 py-0.5 rounded-sm text-[9px] font-black uppercase shadow-sm">Rx Only</span>
-                                                    <span className="text-[8px] text-purple-400 font-bold mt-1 uppercase tracking-tighter">High Safety</span>
-                                                </div>
-                                            ) : (
-                                                <span className="text-gray-200 text-xs font-black">OTC</span>
-                                            )}
-                                        </td>
-                                        <td className="py-4 px-4 rounded-r-xl border-y border-r border-gray-100">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-6 h-6 rounded-full bg-gray-50 flex items-center justify-center border border-gray-100">
-                                                    <Activity size={12} className="text-teal-600" />
-                                                </div>
-                                                <span className="text-[11px] font-bold text-gray-700 truncate max-w-[100px]">
-                                                    {prod["Brand Name"] || "Sanjeevani Care"}
+                                        </div>
+                                    </td>
+                                    <td className="py-4 px-4 border-y border-gray-100">
+                                        <span className="px-2.5 py-1 bg-gray-50 text-gray-600 rounded-md text-[10px] font-bold uppercase tracking-wide border border-gray-100">
+                                            {prod.Category || "General"}
+                                        </span>
+                                    </td>
+                                    <td className="py-4 px-4 border-y border-gray-100">
+                                        <div className="flex flex-col gap-1.5">
+                                            <div className="flex justify-between items-end">
+                                                <span className={`text-xs font-black ${stockText}`}>
+                                                    {stock} Units
+                                                </span>
+                                                <span className="text-[9px] text-gray-400 font-bold uppercase">
+                                                    {stock === 0 ? 'Out of Stock' : stock < 20 ? 'Critical' : 'Stable'}
                                                 </span>
                                             </div>
-                                        </td>
-                                    </tr>
-                                );
-                            }) : (
-                                <tr>
-                                    <td colSpan={6} className="py-20 text-center">
-                                        <div className="flex flex-col items-center gap-3 opacity-30">
-                                            <Package size={48} className="text-gray-300" />
-                                            <p className="text-lg font-bold text-gray-400">No Intelligence Data Found</p>
+                                            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                                <div
+                                                    className={`h-full ${stockColor} transition-all duration-1000 shadow-[0_0_8px_rgba(0,0,0,0.1)]`}
+                                                    style={{ width: `${stockPercent}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="py-4 px-4 border-y border-gray-100">
+                                        <span className="text-gray-500 italic text-xs font-medium block truncate max-w-[120px]" title={prod["Generic Name"]}>
+                                            {prod["Generic Name"] || "-"}
+                                        </span>
+                                    </td>
+                                    <td className="py-4 px-4 border-y border-gray-100 text-center">
+                                        {prod.Category?.toLowerCase().includes('antibiotic') || prod.Category?.toLowerCase().includes('chronic') ? (
+                                            <div className="inline-flex flex-col items-center">
+                                                <span className="bg-purple-600 text-white px-2 py-0.5 rounded-sm text-[9px] font-black uppercase shadow-sm">Rx Only</span>
+                                                <span className="text-[8px] text-purple-400 font-bold mt-1 uppercase tracking-tighter">High Safety</span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-gray-200 text-xs font-black">OTC</span>
+                                        )}
+                                    </td>
+                                    <td className="py-4 px-4 rounded-r-xl border-y border-r border-gray-100">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-full bg-gray-50 flex items-center justify-center border border-gray-100">
+                                                <Activity size={12} className="text-teal-600" />
+                                            </div>
+                                            <span className="text-[11px] font-bold text-gray-700 truncate max-w-[100px]">
+                                                {prod["Brand Name"] || "Sanjeevani Care"}
+                                            </span>
                                         </div>
                                     </td>
                                 </tr>
-                            )}
-                        </tbody>
-                    </table>
-                )}
+                            );
+                        }) : (
+                            <tr>
+                                <td colSpan={6} className="py-20 text-center">
+                                    <div className="flex flex-col items-center gap-3 opacity-30">
+                                        <Package size={48} className="text-gray-300" />
+                                        <p className="text-lg font-bold text-gray-400">No Intelligence Data Found</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
             </div>
 
             <div className="mt-4 flex items-center justify-between text-xs text-gray-500">

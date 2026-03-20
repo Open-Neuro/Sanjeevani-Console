@@ -22,7 +22,6 @@ interface Toast {
 
 const Orders = () => {
     const [orders, setOrders] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
     const [page] = useState(1);
     const [total, setTotal] = useState(0);
     const [search, setSearch] = useState('');
@@ -36,7 +35,6 @@ const Orders = () => {
 
     const loadOrders = async () => {
         try {
-            setLoading(true);
             const data = await fetchRecentOrders(50);
             setOrders(data.data || []);
             setTotal(data.total || 0);
@@ -44,7 +42,7 @@ const Orders = () => {
             console.error("Error fetching orders:", err);
             showToast('error', 'Failed to sync with pharmacy core.');
         } finally {
-            setLoading(false);
+            // No loading state
         }
     };
 
@@ -114,12 +112,6 @@ const Orders = () => {
                 <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-sky-500 to-emerald-500 animate-pulse"></div>
 
-                    {loading && (
-                        <div className="absolute top-0 left-0 right-0 h-[2px] z-[100] overflow-hidden bg-transparent">
-                            <div className="h-full bg-[#bbed3b] animate-[progress_1.5s_ease-in-out_infinite]" style={{ width: '40%' }}></div>
-                        </div>
-                    )}
-
                     <div className="flex justify-between items-center mb-6">
                         <div className="flex items-center gap-4">
                             <div className="relative">
@@ -140,15 +132,7 @@ const Orders = () => {
                     </div>
 
                     <div className="overflow-x-auto min-h-[400px]">
-                        {loading && orders.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-[400px] gap-4">
-                                <div className="p-4 bg-gray-50 rounded-full">
-                                    <Loader2 className="animate-spin text-emerald-500" size={40} />
-                                </div>
-                                <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">Synchronizing Multi-Agent Pipeline...</p>
-                            </div>
-                        ) : (
-                            <table className="w-full text-left border-collapse">
+                        <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="border-b border-gray-100">
                                         <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Order Hash</th>
@@ -194,7 +178,6 @@ const Orders = () => {
                                     )}
                                 </tbody>
                             </table>
-                        )}
                     </div>
                 </div>
             </div>

@@ -36,9 +36,6 @@ const Overview = () => {
         return cached ? JSON.parse(cached) : [];
     });
 
-    // Only show full-page loader if we have NO cached data at all
-    const [loading, setLoading] = useState(!overview && refills.length === 0);
-    const [isRefreshing, setIsRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     // Modal state for stat details
@@ -92,9 +89,7 @@ const Overview = () => {
     useEffect(() => {
         const loadData = async () => {
             try {
-                if (!loading) setIsRefreshing(true);
-
-                // Fetch data in parallel but handle them as they come or together
+                // Fetch data in parallel
                 const results = await Promise.allSettled([
                     fetchDashboardOverview(),
                     fetchRefillAlerts(),
@@ -133,11 +128,9 @@ const Overview = () => {
                 setError(null);
             } catch (err: any) {
                 console.error("Error loading dashboard data:", err);
-                // Only show error if we have no data at all
                 if (!overview) setError("Failed to connect to backend.");
             } finally {
-                setLoading(false);
-                setIsRefreshing(false);
+                // No loaders to clear
             }
         };
 
