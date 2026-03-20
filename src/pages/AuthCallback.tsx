@@ -36,10 +36,10 @@ const AuthCallback = () => {
 
                 if (token) {
                     // Store token and trigger context update
-                    // Note: AuthContext will fetch the real profile once it sees the token
-                    login(token, {}); 
+                    // Note: AuthContext will now fetch and wait for the real profile
+                    await login(token, {}); 
                     
-                    // Redirect to root, where SignUp will handle the logic
+                    // Redirect to root, where App.tsx routing will handle the logic
                     navigate('/', { replace: true });
                 } else {
                     // No token found, redirect to login

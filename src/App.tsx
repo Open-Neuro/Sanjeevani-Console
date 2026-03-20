@@ -13,6 +13,57 @@ import Onboarding from './pages/Onboarding';
 import MainLayout from './components/MainLayout';
 import { AuthProvider } from './context/AuthContext';
 
+import { useAuth } from './context/AuthContext';
+import { Navigate, Outlet } from 'react-router-dom';
+
+// Protected Route Wrapper - Redirects to login if not authenticated
+// Also handles onboarding redirect if profile is incomplete
+const ProtectedRoute = () => {
+  const { user, token, loading } = useAuth();
+  
+  if (loading) return null;
+  
+  if (!token || !user) return <Navigate to="/login" replace />;
+  
+  if (!user.pharmacy_name) {
+    return <Navigate to="/onboarding" replace />;
+  }
+  
+  return <Outlet />;
+};
+
+// Onboarding Route Wrapper - Only for logged in users WITHOUT a pharmacy profile
+const OnboardingRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, token, loading } = useAuth();
+  
+  if (loading) return null;
+  
+  if (!token || !user) return <Navigate to="/login" replace />;
+  
+  if (user.pharmacy_name) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return <>{children}</>;
+};
+
+// Public Route Wrapper - Redirects to dashboard if already authenticated
+const PublicRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, token, loading } = useAuth();
+  
+  if (loading) return null;
+  
+  if (token && user) {
+    if (user.pharmacy_name) {
+      return <Navigate to="/dashboard" replace />;
+    } else {
+      return <Navigate to="/onboarding" replace />;
+    }
+  }
+  
+  return <>{children}</>;
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -20,22 +71,28 @@ function App() {
         <div className="font-sans antialiased text-gray-900 bg-[#f4f7f6] min-h-screen">
           <Routes>
             {/* Public Routes */}
-            <Route path="/" element={<SignUp />} />
-            <Route path="/login" element={<SignUp />} />
+            <Route path="/" element={<PublicRoute><SignUp /></PublicRoute>} />
+            <Route path="/login" element={<PublicRoute><SignUp /></PublicRoute>} />
             <Route path="/auth/callback" element={<AuthCallback />} />
-            <Route path="/dashboard/auth/callback" element={<AuthCallback />} />
-            <Route path="/onboarding" element={<Onboarding />} />
+            
+            {/* Onboarding Route */}
+            <Route path="/onboarding" element={<OnboardingRoute><Onboarding /></OnboardingRoute>} />
 
             {/* Protected Routes inside MainLayout */}
-            <Route path="/dashboard" element={<MainLayout />}>
-              <Route index element={<Overview />} />
-              <Route path="products" element={<Products />} />
-              <Route path="orders" element={<Orders />} />
-              <Route path="sales" element={<Sales />} />
-              <Route path="customers" element={<Customers />} />
-              <Route path="payments" element={<Payments />} />
-              <Route path="ai-insights" element={<AIInsights />} />
+            <Route element={<ProtectedRoute />}>
+              <Route path="/dashboard" element={<MainLayout />}>
+                <Route index element={<Overview />} />
+                <Route path="products" element={<Products />} />
+                <Route path="orders" element={<Orders />} />
+                <Route path="sales" element={<Sales />} />
+                <Route path="customers" element={<Customers />} />
+                <Route path="payments" element={<Payments />} />
+                <Route path="ai-insights" element={<AIInsights />} />
+              </Route>
             </Route>
+            
+            {/* Catch-all */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
       </Router>

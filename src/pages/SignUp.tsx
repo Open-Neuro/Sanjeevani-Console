@@ -1,6 +1,4 @@
 import { useState, useEffect, type CSSProperties } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
 import { Shield, Sparkles } from "lucide-react";
 import SanjeevaniLogo from "../components/SanjeevaniLogo";
 
@@ -282,22 +280,11 @@ const S: Record<string, CSSProperties> = {
 
 // ══════════════════════════════════════════════════════
 export default function SignUp() {
-    const navigate = useNavigate();
-    const { user, token } = useAuth();
     const [currentSlide, setCurrentSlide] = useState(0);
     const [fadeIn, setFadeIn] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
 
-    // Redirect if already logged in
-    useEffect(() => {
-        if (user || token) {
-            if (user?.pharmacy_name) {
-                navigate("/dashboard");
-            } else {
-                navigate("/onboarding");
-            }
-        }
-    }, [user, token, navigate]);
+    // Redirection is now handled by PublicRoute wrapper in App.tsx
 
     // Auto-advance slider
     useEffect(() => {

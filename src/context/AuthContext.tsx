@@ -97,12 +97,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
             if (response.ok) {
                 const userData = await response.json();
-                console.log("AuthProvider: Profile fetched:", userData.name || userData.email);
                 const finalUser = userData.user || userData;
+                console.log("AuthProvider: Profile fetched:", finalUser.email);
                 setUser(finalUser);
                 return finalUser;
-            } else if (response.status === 401 || response.status === 403) {
-                console.warn("AuthProvider: Session invalid. Clearing.");
+            } else if (response.status === 401 || response.status === 403 || response.status === 404) {
+                console.warn(`AuthProvider: Session invalid or user not found (${response.status}). Clearing.`);
                 logout();
             }
         } catch (e) {
@@ -126,10 +126,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.log("AuthProvider: Login triggered");
         localStorage.setItem('sanjeevani_token', newToken);
         setToken(newToken);
+        
         if (profile && Object.keys(profile).length > 0) {
             setUser(profile);
+            setLoading(false);
         } else {
+            setLoading(true);
             await fetchProfile(newToken);
+            setLoading(false);
         }
     };
 
