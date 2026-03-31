@@ -4,7 +4,7 @@ import { fetchProducts, addProduct, bulkAddProducts } from '../services/api';
 import * as XLSX from 'xlsx';
 
 const SCHEDULES = ['OTC', 'H', 'H1', 'X'];
-
+ 
 const ProductTable = () => {
     const [products, setProducts] = useState<any[]>([]);
     const [total, setTotal] = useState(0);
