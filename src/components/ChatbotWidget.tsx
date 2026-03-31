@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, Paperclip, Send, Bot, User, Loader2, CheckCircle2, AlertCircle, ShieldCheck, Database, ShoppingCart, Activity } from 'lucide-react';
+import { Paperclip, Send, Bot, User, Loader2, CheckCircle2, ShieldCheck, Database, ShoppingCart, Activity } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+import { getApiBaseUrl } from '../utils/apiConfig';
+
+const API_BASE_URL = getApiBaseUrl();
 
 interface Message {
   role: 'assistant' | 'user';

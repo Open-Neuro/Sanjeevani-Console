@@ -17,9 +17,18 @@ import {
     Database,
     ExternalLink,
     Terminal,
+    Gem,
+    Store,
+    Users2,
+    Receipt,
+    HelpCircle,
+    Info,
+    ChevronDown,
+    ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import SanjeevaniLogo from './SanjeevaniLogo';
+import { getApiBaseUrl, getConfiguredApiBaseUrl, isUsingLocal, switchToLocal, switchToDeployed } from '../utils/apiConfig';
 
 /* ─── Nav items ─────────────────────────────────────── */
 const NAV_MAIN = [
@@ -29,6 +38,7 @@ const NAV_MAIN = [
     { to: '/dashboard/sales', icon: LineChart, label: 'Sales' },
     { to: '/dashboard/customers', icon: Users, label: 'Customers' },
     { to: '/dashboard/payments', icon: CreditCard, label: 'Payments' },
+    { to: '/dashboard/plans', icon: Gem, label: 'Our Plan' },
 ];
 
 const NAV_AI = [
@@ -40,7 +50,10 @@ const Sidebar = () => {
     const location = useLocation();
     const [expanded, setExpanded] = useState(true);
     const [profileOpen, setProfileOpen] = useState(false);
+    const [advancedOpen, setAdvancedOpen] = useState(false);
     const { user, logout } = useAuth();
+    const activeApiBaseUrl = getApiBaseUrl();
+    const configuredApiBaseUrl = getConfiguredApiBaseUrl();
     
     // Rely exclusively on backend user object
     const pharmacyName = user?.pharmacy_name || "Sanjeevani Admin";
@@ -215,32 +228,78 @@ const Sidebar = () => {
 
                             {/* Menu Actions */}
                             <div className="p-2 space-y-0.5">
-                                <p className="px-3 py-1.5 text-[9px] font-bold tracking-[0.2em] text-gray-400 uppercase">System Config</p>
+                                <p className="px-3 py-1.5 text-[9px] font-bold tracking-[0.2em] text-gray-400 uppercase">Pharmacy Management</p>
                                 <button className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg group transition-colors">
                                     <div className="flex items-center gap-2">
-                                        <Shield size={16} className="text-gray-400 group-hover:text-[#0a2e2a] transition-colors" />
-                                        <span className="font-medium">Access Controls & IAM</span>
+                                        <Store size={16} className="text-gray-400 group-hover:text-[#0a2e2a] transition-colors" />
+                                        <span className="font-medium">Pharmacy Profile</span>
                                     </div>
                                 </button>
                                 <button className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg group transition-colors">
                                     <div className="flex items-center gap-2">
-                                        <Database size={16} className="text-gray-400 group-hover:text-amber-500 transition-colors" />
-                                        <span className="font-medium">MongoDB Sync Setup</span>
+                                        <Users2 size={16} className="text-gray-400 group-hover:text-[#0a2e2a] transition-colors" />
+                                        <span className="font-medium">Staff & Permissions</span>
                                     </div>
                                 </button>
                                 <button className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg group transition-colors">
                                     <div className="flex items-center gap-2">
-                                        <Terminal size={16} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
-                                        <span className="font-medium">Agentic Trace Logs</span>
+                                        <Receipt size={16} className="text-gray-400 group-hover:text-[#0a2e2a] transition-colors" />
+                                        <span className="font-medium">Billing & Subscriptions</span>
+                                    </div>
+                                </button>
+                                <button className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg group transition-colors">
+                                    <div className="flex items-center gap-2">
+                                        <HelpCircle size={16} className="text-gray-400 group-hover:text-[#0a2e2a] transition-colors" />
+                                        <span className="font-medium">Help & Support</span>
                                     </div>
                                     <ExternalLink size={12} className="text-gray-300" />
                                 </button>
-                                <button className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg group transition-colors">
-                                    <div className="flex items-center gap-2">
-                                        <Settings size={16} className="text-gray-400 group-hover:text-gray-900 transition-colors" />
-                                        <span className="font-medium">Account Settings</span>
-                                    </div>
-                                </button>
+
+                                {/* Advanced Settings Toggle */}
+                                <div className="mt-2 pt-1 border-t border-gray-50">
+                                    <button 
+                                        onClick={() => setAdvancedOpen(!advancedOpen)}
+                                        className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-colors"
+                                    >
+                                        <span>Advanced Tools</span>
+                                        {advancedOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                    </button>
+                                    
+                                    {advancedOpen && (
+                                        <div className="mt-1 space-y-0.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                                            <button className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 rounded-lg transition-colors">
+                                                <Terminal size={14} className="text-gray-400" />
+                                                <span>Agentic Trace Logs</span>
+                                            </button>
+                                            <div className="mx-2 mt-1 p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <span className="text-[9px] font-bold text-gray-400 uppercase">Backend API</span>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${isUsingLocal() ? 'bg-amber-400' : 'bg-green-500'} animate-pulse`} />
+                                                </div>
+                                                <div className={`w-full py-1.5 px-2 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 ${
+                                                    isUsingLocal() ? 'bg-amber-100 text-amber-700' : 'bg-[#0a2e2a] text-[#bbed3b]'
+                                                }`}>
+                                                    {isUsingLocal() ? 'Local Env' : 'Production API'}
+                                                </div>
+                                                <p className="mt-1.5 text-[8px] text-gray-400 break-all font-mono">
+                                                    {activeApiBaseUrl}
+                                                </p>
+                                                
+                                                {/* Switch Button */}
+                                                <button
+                                                    onClick={isUsingLocal() ? switchToDeployed : switchToLocal}
+                                                    className={`mt-2.5 w-full py-1.5 rounded-lg text-[10px] font-bold transition-all border ${
+                                                        isUsingLocal() 
+                                                            ? 'bg-white text-gray-700 border-gray-200 hover:bg-gray-100' 
+                                                            : 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100'
+                                                    }`}
+                                                >
+                                                    {isUsingLocal() ? '🚀 Switch to Live Production' : '🛠️ Switch to Local Development'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="p-2 border-t border-gray-100">

@@ -1,73 +1,86 @@
-
-import { MoreVertical, Pill, Droplet, Check, Zap, Target, HeartPulse, Sparkles, Activity } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MoreVertical, Pill, Droplet, Check, Zap, Target, HeartPulse, Sparkles, Activity, Box } from 'lucide-react';
+import { fetchDashboardProducts } from '../services/api';
 
 const CategoryCards = () => {
-    const categories = [
-        {
-            name: 'Antibiotics',
-            count: '120',
-            change: '+2%',
-            trend: 'up',
-            icon: Pill,
-            active: true,
-        },
-        {
-            name: 'Pain Relievers',
-            count: '95',
-            change: '+0.6%',
-            trend: 'down',
-            icon: Droplet,
-            active: false,
-        },
-        {
-            name: 'Vitamins & Supplements',
-            count: '75',
-            change: '+2%',
-            trend: 'up',
-            icon: Check,
-            active: false,
-        },
-        {
-            name: 'Antiviral Drugs',
-            count: '50',
-            change: '+0.2%',
-            trend: 'down',
-            icon: Zap,
-            active: false,
-        },
-        {
-            name: 'Diabetes Care',
-            count: '65',
-            change: '+0.1%',
-            trend: 'down',
-            icon: Target,
-            active: false,
-        },
-        {
-            name: 'Cardiovascular',
-            count: '80',
-            change: '+8%',
-            trend: 'up',
-            icon: HeartPulse,
-            active: false,
-        },
-        {
-            name: 'Allergy Medication',
-            count: '40',
-            change: '+5%',
-            trend: 'up',
-            icon: Sparkles,
-            active: false,
-        },
-        {
-            name: 'Respiratory Medicines',
-            count: '55',
-            change: '+2.6%',
-            trend: 'up',
-            icon: Activity,
-            active: false,
-        }
-    ];
+    const [categories, setCategories] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const iconMap: Record<string, any> = {
+        'Antibiotics': Pill,
+        'Pain Relievers': Droplet,
+        'Vitamins & Supplements': Check,
+        'Vitamins': Check,
+        'Antiviral Drugs': Zap,
+        'Diabetes Care': Target,
+        'Cardiovascular': HeartPulse,
+        'Allergy Medication': Sparkles,
+        'Respiratory Medicines': Activity,
+    };
+
+    useEffect(() => {
+        const loadCategories = async () => {
+            setLoading(true);
+            try {
+                const res = await fetchDashboardProducts();
+                if (res?.data?.category_breakdown && res.data.category_breakdown.length > 0) {
+                    const dynamicCats = res.data.category_breakdown.map((item: any, idx: number) => ({
+                        name: item.category || 'Unknown',
+                        count: item.count.toString(),
+                        change: item.change || '+0%', 
+                        trend: item.trend || 'up',
+                        icon: iconMap[item.category] || Pill,
+                        active: idx === 0,
+                    }));
+                    setCategories(dynamicCats.slice(0, 8));
+                } else {
+                    setCategories([]);
+                }
+            } catch (error) {
+                console.error("Failed to load category products:", error);
+                setCategories([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadCategories();
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 px-8 mb-6">
+                {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="h-32 bg-white rounded-xl border border-gray-100 animate-pulse p-4">
+                        <div className="flex justify-between mb-4">
+                            <div className="h-3 w-20 bg-gray-100 rounded" />
+                            <div className="h-3 w-3 bg-gray-100 rounded" />
+                        </div>
+                        <div className="h-8 w-12 bg-gray-100 rounded mb-4" />
+                        <div className="flex justify-between items-center">
+                            <div className="h-3 w-24 bg-gray-100 rounded" />
+                            <div className="h-8 w-8 bg-gray-50 rounded-full" />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    if (categories.length === 0) {
+        return (
+            <div className="px-8 mb-6">
+                <div className="bg-white border border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+                    <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-3">
+                        <Box size={24} className="text-gray-300" />
+                    </div>
+                    <h3 className="text-sm font-bold text-gray-900">No Inventory Data Yet</h3>
+                    <p className="text-xs text-gray-500 max-w-xs mt-1">
+                        Connect your inventory or add products to see real-time category distribution here.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 px-8 mb-6">
@@ -118,3 +131,4 @@ const CategoryCards = () => {
 };
 
 export default CategoryCards;
+

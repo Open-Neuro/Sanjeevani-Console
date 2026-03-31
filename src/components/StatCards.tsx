@@ -10,9 +10,14 @@ const StatCards = () => {
         const loadStats = async () => {
             try {
                 const response = await fetchDashboardOverview();
-                setStats(response.data);
+                setStats(response.data || {});
             } catch (err) {
                 console.error("Error loading dashboard stats:", err);
+                setStats({
+                    total_products: 0,
+                    low_stock_items: 0,
+                    expiry_risk_items: 0,
+                });
             } finally {
                 setLoading(false);
             }
@@ -59,7 +64,7 @@ const StatCards = () => {
                     <div>
                         <p className="text-gray-500 text-xs mb-0.5 font-medium">Low Stock Items</p>
                         <h2 className="text-2xl font-bold text-gray-900 flex items-baseline gap-2">
-                            {stats?.low_stock_items || '0'}
+                            {stats?.low_stock_items ?? '0'}
                         </h2>
                     </div>
                 </div>
@@ -77,7 +82,7 @@ const StatCards = () => {
                     <div>
                         <p className="text-gray-500 text-xs mb-0.5 font-medium">Out of Stock</p>
                         <h2 className="text-2xl font-bold text-gray-900 flex items-baseline gap-2">
-                            {stats?.expiry_risk_items || '0'}
+                            {stats?.expiry_risk_items ?? '0'}
                         </h2>
                     </div>
                 </div>

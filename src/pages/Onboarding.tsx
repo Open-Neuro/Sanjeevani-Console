@@ -197,9 +197,7 @@ export default function Onboarding() {
                 <div className="bg-white border-2 border-gray-100 rounded-3xl p-8 flex flex-col hover:border-gray-200 transition-colors shadow-sm relative">
                     <h3 className="text-xl font-bold text-gray-800 mb-2">Sanjeevani Base</h3>
                     <p className="text-sm text-gray-500 mb-6 h-10">Essential tools for digital inventory management.</p>
-                    <div className="mb-6">
-                        <span className="text-4xl font-black text-gray-900">₹999</span><span className="text-gray-500 font-medium">/mo</span>
-                    </div>
+
                     <ul className="space-y-4 mb-8 flex-1">
                         {["Advanced Inventory Dashboard", "Bulk Add & Excel Sync", "Low Stock & Expiry Alerts", "Manual POS Integration"].map((feat, i) => (
                             <li key={i} className="flex items-start gap-3 text-sm text-gray-600 font-medium">
@@ -213,7 +211,7 @@ export default function Onboarding() {
                         className="w-full py-3.5 rounded-xl font-bold text-gray-800 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         {isSaving && <Loader2 size={18} className="animate-spin" />}
-                        Select Base
+                        Process
                     </button>
                 </div>
 
@@ -227,9 +225,7 @@ export default function Onboarding() {
                         <h3 className="text-xl font-bold text-[#0a2e2a]">Sanjeevani Pro</h3>
                     </div>
                     <p className="text-sm text-gray-500 mb-6 h-10">Everything you need to automate orders and grow.</p>
-                    <div className="mb-6">
-                        <span className="text-4xl font-black text-gray-900">₹2,499</span><span className="text-gray-500 font-medium">/mo</span>
-                    </div>
+
                     <ul className="space-y-4 mb-8 flex-1">
                         <li className="flex items-start gap-3 text-sm text-gray-800 font-bold">
                             <CheckCircle2 size={18} className="mt-0.5 text-green-500 shrink-0" /> WhatsApp & Telegram Orders
@@ -250,7 +246,7 @@ export default function Onboarding() {
                             className="w-full py-3.5 rounded-xl font-bold text-[#bbed3b] bg-[#0a2e2a] hover:bg-[#133d39] transition-all shadow-xl hover:shadow-2xl disabled:opacity-50 flex items-center justify-center gap-2"
                         >
                             {isSaving && <Loader2 size={18} className="animate-spin" />}
-                            Start Pro Trial
+                            Process
                         </button>
                 </div>
 
@@ -263,9 +259,7 @@ export default function Onboarding() {
                             <h3 className="text-xl font-bold text-white">Ultimate Edge</h3>
                         </div>
                         <p className="text-sm text-emerald-100/70 mb-6 h-10">For elite pharmacies running on full auto-pilot.</p>
-                        <div className="mb-6">
-                            <span className="text-4xl font-black text-white">₹7,999</span><span className="text-emerald-100/50 font-medium">/mo</span>
-                        </div>
+
                         <ul className="space-y-4 mb-8 flex-1">
                             <li className="flex items-start gap-3 text-sm text-[#bbed3b] font-black">
                                 <PhoneCall size={18} className="mt-0.5 shrink-0" /> AI Calling Assistant
@@ -289,7 +283,7 @@ export default function Onboarding() {
                             className="w-full py-3.5 rounded-xl font-bold text-purple-900 bg-gradient-to-r from-purple-300 to-purple-400 hover:from-purple-200 hover:to-purple-300 transition-all shadow-[0_0_30px_rgba(168,85,247,0.4)] disabled:opacity-50 flex items-center justify-center gap-2"
                         >
                             {isSaving && <Loader2 size={18} className="animate-spin" />}
-                            Go Ultimate
+                            Process
                         </button>
                     </div>
                 </div>

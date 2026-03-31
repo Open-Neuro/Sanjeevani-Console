@@ -25,6 +25,7 @@ const Orders = () => {
     const [page] = useState(1);
     const [total, setTotal] = useState(0);
     const [search, setSearch] = useState('');
+    const [loading, setLoading] = useState(true);
     const [toasts, setToasts] = useState<Toast[]>([]);
 
     const showToast = (type: Toast['type'], message: string) => {
@@ -35,36 +36,49 @@ const Orders = () => {
 
     const loadOrders = async () => {
         try {
+            setLoading(true);
             const data = await fetchRecentOrders(50);
             setOrders(data.data || []);
             setTotal(data.total || 0);
         } catch (err) {
-            console.error("Error fetching orders:", err);
+            console.error('Error fetching orders:', err);
+            setOrders([]);
+            setTotal(0);
             showToast('error', 'Failed to sync with pharmacy core.');
         } finally {
-            // No loading state
+            setLoading(false);
         }
     };
 
     useEffect(() => {
         loadOrders();
-        // Set up auto-refresh every 10 seconds for real-time order notifications
         const interval = setInterval(loadOrders, 10000);
         return () => clearInterval(interval);
     }, [page, search]);
+
+    const filteredOrders = orders.filter((order) => {
+        if (!search.trim()) return true;
+        const q = search.toLowerCase();
+        return [
+            order.order_id,
+            order.customer_name,
+            order.product_name,
+            order.order_channel,
+            order.order_status,
+        ].some((value) => String(value || '').toLowerCase().includes(q));
+    });
 
     const getPlatformBadge = (platform: string) => {
         const p = (platform || 'web').toLowerCase();
         if (p.includes('whatsapp')) return <span className="inline-flex items-center gap-1.5 text-green-600 font-semibold text-sm"><MessageCircle size={15} /> WhatsApp</span>;
         if (p.includes('telegram')) return <span className="inline-flex items-center gap-1.5 text-blue-500 font-semibold text-sm"><Send size={15} /> Telegram</span>;
         if (p.includes('sms')) return <span className="inline-flex items-center gap-1.5 text-purple-600 font-semibold text-sm"><Smartphone size={15} /> SMS</span>;
-        if (p.includes('demo')) return <span className="inline-flex items-center gap-1.5 text-indigo-600 font-semibold text-sm"><Bell size={15} /> Demo</span>;
         if (p.includes('voice')) return <span className="inline-flex items-center gap-1.5 text-amber-600 font-semibold text-sm"><Smartphone size={15} /> Voice AI</span>;
-        return <span className="inline-flex items-center gap-1.5 text-gray-500 font-semibold text-sm"><Globe size={15} /> Web Chat</span>;
+        return <span className="inline-flex items-center gap-1.5 text-gray-500 font-semibold text-sm"><Globe size={15} /> Web</span>;
     };
 
     const isLive = (o: any) => {
-        const s = (o['Order Status'] || o.status || '').toLowerCase();
+        const s = String(o.order_status || o.status || '').toLowerCase();
         return s === 'pending' || s === 'confirmed' || s === 'validated';
     };
 
@@ -74,7 +88,6 @@ const Orders = () => {
         <div className="flex-1 flex flex-col h-screen overflow-y-auto custom-scrollbar bg-[#f8faf9]">
             <Header title="Orders Terminal (AI Orchestration Live)" />
 
-            {/* Toast Notifications */}
             <div className="fixed top-5 right-5 z-50 flex flex-col gap-3 pointer-events-none">
                 {toasts.map(t => (
                     <div
@@ -96,19 +109,23 @@ const Orders = () => {
             </div>
 
             <div className="px-8 pb-8 space-y-6">
-                {/* Dashboard Stats */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
                     <div className="bg-white border border-gray-100 p-5 rounded-2xl flex items-center justify-between shadow-sm">
-                        <div><p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Live Processing</p><p className="text-3xl font-black text-gray-800">{pendingCount}</p></div>
-                        <div className="p-3 bg-emerald-50 rounded-xl text-emerald-500"><Loader2 className="animate-spin" size={28} /></div>
+                        <div>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Live Processing</p>
+                            <p className="text-3xl font-black text-gray-800">{pendingCount}</p>
+                            <p className="text-[10px] font-semibold text-gray-400 mt-1">{loading ? 'Syncing...' : 'Live order queue'}</p>
+                        </div>
+                        <div className="p-3 bg-emerald-50 rounded-xl text-emerald-500">
+                            {loading ? <Loader2 className="animate-spin" size={28} /> : <PackageOpen size={28} />}
+                        </div>
                     </div>
                     <div className="bg-white border border-gray-100 p-5 rounded-2xl flex items-center justify-between shadow-sm">
-                        <div><p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Syncs</p><p className="text-3xl font-black text-gray-800">{total}</p></div>
+                        <div><p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Orders</p><p className="text-3xl font-black text-gray-800">{total}</p></div>
                         <div className="p-3 bg-blue-50 rounded-xl text-blue-500"><Globe size={28} /></div>
                     </div>
                 </div>
 
-                {/* Main Orders Terminal */}
                 <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-sky-500 to-emerald-500 animate-pulse"></div>
 
@@ -127,57 +144,61 @@ const Orders = () => {
                         </div>
                         <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50/50 text-emerald-700 text-[10px] font-black uppercase tracking-widest rounded-full border border-emerald-100">
                             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></div>
-                            AI Autonomous Mode Active
+                            Live backend orders
                         </div>
                     </div>
 
                     <div className="overflow-x-auto min-h-[400px]">
                         <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="border-b border-gray-100">
-                                        <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Order Hash</th>
-                                        <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Customer ID</th>
-                                        <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Source Channel</th>
-                                        <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Medication Profile</th>
-                                        <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Inventory Qty</th>
-                                        <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Value (₹)</th>
-                                        <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center italic">Agent Action</th>
+                            <thead>
+                                <tr className="border-b border-gray-100">
+                                    <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Order Hash</th>
+                                    <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Customer</th>
+                                    <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Source Channel</th>
+                                    <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Medication</th>
+                                    <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Qty</th>
+                                    <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Value (INR)</th>
+                                    <th className="pb-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center italic">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="text-sm">
+                                {filteredOrders.length > 0 ? filteredOrders.map((order, i) => (
+                                    <tr key={i} className="border-b border-gray-50 transition-all hover:bg-gray-50/50 group">
+                                        <td className="py-5 px-4">
+                                            <span className="font-mono text-gray-400 text-xs">#{order.order_id?.slice(-6) || 'N/A'}</span>
+                                        </td>
+                                        <td className="py-5 px-4 font-bold text-gray-800">{order.customer_name || 'Anonymous'}</td>
+                                        <td className="py-5 px-4">{getPlatformBadge(order.order_channel || order.channel || order.source)}</td>
+                                        <td className="py-5 px-4 text-gray-600 font-medium">{order.product_name || '-'}</td>
+                                        <td className="py-5 px-4 text-gray-600 font-black">{Math.round(order.quantity || 1)}</td>
+                                        <td className="py-5 px-4 text-gray-900 font-black text-right">{Number(order.total_amount || 0).toFixed(2)}</td>
+                                        <td className="py-5 px-4 text-center">
+                                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100 shadow-sm opacity-80 group-hover:opacity-100 transition-opacity">
+                                                {order.order_status || 'Pending'}
+                                            </span>
+                                        </td>
                                     </tr>
-                                </thead>
-                                <tbody className="text-sm">
-                                    {orders.length > 0 ? orders.map((order, i) => (
-                                        <tr
-                                            key={i}
-                                            className={`border-b border-gray-50 transition-all hover:bg-gray-50/50 group`}
-                                        >
-                                            <td className="py-5 px-4">
-                                                <span className="font-mono text-gray-400 text-xs">#{order['Order ID']?.slice(-6) || order.order_id?.slice(-6) || 'N/A'}</span>
-                                            </td>
-                                            <td className="py-5 px-4 font-bold text-gray-800">{order['Patient Name'] || 'Anonymous Caller'}</td>
-                                            <td className="py-5 px-4">{getPlatformBadge(order.platform || order['Order Channel'] || order.channel || order.source)}</td>
-                                            <td className="py-5 px-4 text-gray-600 font-medium">{order['Medicine Name'] || '—'}</td>
-                                            <td className="py-5 px-4 text-gray-600 font-black">{Math.round(order['Quantity Ordered'] || order['Quantity'] || order.quantity || 1)}</td>
-                                            <td className="py-5 px-4 text-gray-900 font-black text-right">
-                                                ₹{(order['Total Amount'] || order['Total Price'] || order.total_price || 0).toFixed(2)}
-                                            </td>
-                                            <td className="py-5 px-4 text-center">
-                                                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100 shadow-sm opacity-80 group-hover:opacity-100 transition-opacity">
-                                                    {order['Order Status'] || order.status || 'AI Managed'}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    )) : (
-                                        <tr>
-                                            <td colSpan={8} className="py-24 text-center">
-                                                <div className="flex flex-col items-center gap-2">
-                                                    <PackageOpen size={48} className="text-gray-200" />
-                                                    <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">No Neural Sync Found</p>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                )) : loading ? (
+                                    <tr>
+                                        <td colSpan={7} className="py-24 text-center">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <Loader2 size={48} className="text-gray-200 animate-spin" />
+                                                <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">Loading live orders</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    <tr>
+                                        <td colSpan={7} className="py-24 text-center">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <PackageOpen size={48} className="text-gray-200" />
+                                                <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">No live orders found</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>

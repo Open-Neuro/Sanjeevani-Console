@@ -10,6 +10,7 @@ import SignUp from './pages/SignUp';
 import AIInsights from './pages/AIInsights';
 import AuthCallback from './pages/AuthCallback';
 import Onboarding from './pages/Onboarding';
+import Plans from './pages/Plans';
 import MainLayout from './components/MainLayout';
 import { AuthProvider } from './context/AuthContext';
 
@@ -87,6 +88,7 @@ function App() {
                 <Route path="sales" element={<Sales />} />
                 <Route path="customers" element={<Customers />} />
                 <Route path="payments" element={<Payments />} />
+                <Route path="plans" element={<Plans />} />
                 <Route path="ai-insights" element={<AIInsights />} />
               </Route>
             </Route>

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 export interface UserProfile {
     id?: string;
+    pharmacy_id?: string;
     name?: string;
     email?: string;
     picture?: string;

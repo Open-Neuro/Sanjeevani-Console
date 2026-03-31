@@ -1,4 +1,6 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+import { getApiBaseUrl } from '../utils/apiConfig';
+
+const API_BASE_URL = getApiBaseUrl();
 
 // Helper to get auth headers
 const getHeaders = (contentType = 'application/json') => {
@@ -18,19 +20,35 @@ const authFetch = async (url: string, options: RequestInit = {}) => {
             ...(options.headers || {}),
         },
     });
-    
+
     if (response.status === 401) {
         // Optional: Handle token expiration/unauthorized
         console.warn('Unauthorized request - redirecting or clearing token potentially');
     }
-    
+
     return response;
+};
+
+export const apiGet = async (path: string) => {
+    const response = await authFetch(`${API_BASE_URL}${path}`);
+    if (!response.ok) throw new Error(`Failed to fetch ${path}`);
+    return response.json();
 };
 
 export const fetchDashboardOverview = async () => {
     const response = await authFetch(`${API_BASE_URL}/dashboard/overview`);
     if (!response.ok) throw new Error('Failed to fetch dashboard overview');
     return response.json();
+};
+
+export const fetchDashboardProducts = async () => {
+    const response = await authFetch(`${API_BASE_URL}/dashboard/products`);
+    if (!response.ok) throw new Error('Failed to fetch dashboard products');
+    return response.json();
+};
+
+export const fetchOperationalStatus = async () => {
+    return apiGet('/dashboard/ops-status');
 };
 
 export const fetchRefillAlerts = async () => {
@@ -49,6 +67,10 @@ export const fetchInventoryAlerts = async () => {
     const response = await authFetch(`${API_BASE_URL}/products/low-stock`);
     if (!response.ok) throw new Error('Failed to fetch inventory alerts');
     return response.json();
+};
+
+export const fetchExpiryRisk = async () => {
+    return apiGet('/products/expiry-risk');
 };
 
 export const fetchRecentOrders = async (limit = 5) => {
@@ -126,5 +148,16 @@ export const fetchAIInsights = async () => {
 export const fetchTimeSeries = async (metric = 'orders', period = '30d') => {
     const response = await authFetch(`${API_BASE_URL}/dashboard/timeseries?metric=${metric}&period=${period}`);
     if (!response.ok) throw new Error('Failed to fetch time series data');
+    return response.json();
+};
+
+export const testAgents = async () => {
+    const response = await authFetch(`${API_BASE_URL}/orders/test-agents`, {
+        method: 'POST',
+    });
+    if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.detail || 'Failed to trigger agent test');
+    }
     return response.json();
 };

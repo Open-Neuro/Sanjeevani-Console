@@ -12,6 +12,23 @@ const ProductTable = () => {
     const [search, setSearch] = useState('');
     const [category] = useState('');
     const [filterStatus, setFilterStatus] = useState<'all' | 'low_stock' | 'expiring'>('all');
+    
+    /* ─── DUMMY DATA FOR DEMO ─── */
+    const DUMMY_PRODUCTS: any[] = [
+        { "Medicine Name": "Augmentin 625 Duo", "Category": "Antibiotics", "Current Stock": 5, "Batch Number": "AUG-221", "Expiry Date": "2024-08-12", "MRP": 210, "Selling Price": 195, "Schedule": "H", "Prescription Required": true },
+        { "Medicine Name": "Pan D Capsule", "Category": "Antacids", "Current Stock": 12, "Batch Number": "PAN-005", "Expiry Date": "2025-01-20", "MRP": 185, "Selling Price": 165, "Schedule": "H", "Prescription Required": true },
+        { "Medicine Name": "Dolo 650mg", "Category": "Analgesics", "Current Stock": 450, "Batch Number": "DOL-884", "Expiry Date": "2025-06-15", "MRP": 30, "Selling Price": 28, "Schedule": "OTC", "Prescription Required": false },
+        { "Medicine Name": "Zifi 200mg", "Category": "Antibiotics", "Current Stock": 18, "Batch Number": "ZIF-112", "Expiry Date": "2024-11-30", "MRP": 155, "Selling Price": 140, "Schedule": "H", "Prescription Required": true },
+        { "Medicine Name": "Lipitor 10mg", "Category": "Statins", "Current Stock": 8, "Batch Number": "LIP-334", "Expiry Date": "2024-05-10", "MRP": 450, "Selling Price": 410, "Schedule": "H", "Prescription Required": true },
+        { "Medicine Name": "Metformin 500mg", "Category": "Anti-Diabetic", "Current Stock": 200, "Batch Number": "MET-771", "Expiry Date": "2025-12-01", "MRP": 15, "Selling Price": 12, "Schedule": "H", "Prescription Required": true },
+        { "Medicine Name": "Amlodipine 5mg", "Category": "Hypertension", "Current Stock": 150, "Batch Number": "AML-445", "Expiry Date": "2025-03-22", "MRP": 85, "Selling Price": 75, "Schedule": "H", "Prescription Required": true },
+        { "Medicine Name": "Azithromycin 500mg", "Category": "Antibiotics", "Current Stock": 45, "Batch Number": "AZI-992", "Expiry Date": "2024-12-15", "MRP": 120, "Selling Price": 105, "Schedule": "H", "Prescription Required": true },
+        { "Medicine Name": "Vicks Action 500", "Category": "Cold & Flu", "Current Stock": 85, "Batch Number": "VIC-111", "Expiry Date": "2025-05-10", "MRP": 45, "Selling Price": 42, "Schedule": "OTC", "Prescription Required": false },
+        { "Medicine Name": "Shelcal 500mg", "Category": "Supplements", "Current Stock": 110, "Batch Number": "SHE-223", "Expiry Date": "2025-08-20", "MRP": 115, "Selling Price": 95, "Schedule": "OTC", "Prescription Required": false },
+    ];
+    /* ─────────────────────────── */
+
+    void DUMMY_PRODUCTS;
 
     // Add product modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -67,6 +84,8 @@ const ProductTable = () => {
             setTotal(data.total || 0);
         } catch (err) {
             console.error("Error fetching products:", err);
+            setProducts([]);
+            setTotal(0);
         }
     };
 
@@ -113,20 +132,30 @@ const ProductTable = () => {
                 const ws = wb.Sheets[wsname];
                 const data = XLSX.utils.sheet_to_json(ws);
                 
+                // Helper to format Excel date numbers
+                const formatExcelDate = (val: any) => {
+                    if (typeof val === 'number') {
+                        // Excel serial date to JS Date
+                        const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+                        return date.toISOString().split('T')[0];
+                    }
+                    return val ? String(val) : '';
+                };
+
                 // Transform data to match API
                 const transformedData = data.map((row: any) => {
                     const schedule = row['Schedule'] || row['schedule'] || 'OTC';
                     return {
-                        medicine_name: row['Medicine Name'] || row['Name'] || row['medicine_name'] || '',
-                        category: row['Category'] || row['category'] || 'General',
+                        medicine_name: String(row['Medicine Name'] || row['Name'] || row['medicine_name'] || ''),
+                        category: String(row['Category'] || row['category'] || 'General'),
                         stock: parseInt(row['Stock'] || row['Current Stock'] || row['stock'] || 0),
-                        generic_name: row['Generic Name'] || row['generic_name'] || '',
-                        brand_name: row['Brand Name'] || row['brand_name'] || '',
-                        batch_no: row['Batch No'] || row['Batch Number'] || row['batch_no'] || '',
-                        expiry_date: row['Expiry Date'] || row['expiry_date'] || '',
+                        generic_name: String(row['Generic Name'] || row['generic_name'] || ''),
+                        brand_name: String(row['Brand Name'] || row['brand_name'] || ''),
+                        batch_no: String(row['Batch No'] || row['Batch Number'] || row['batch_no'] || ''),
+                        expiry_date: formatExcelDate(row['Expiry Date'] || row['expiry_date']),
                         mrp: parseFloat(row['MRP'] || row['mrp'] || 0),
                         selling_price: parseFloat(row['Selling Price'] || row['selling_price'] || row['Price'] || 0),
-                        schedule: schedule,
+                        schedule: String(schedule),
                         prescription_required: schedule !== 'OTC'
                     };
                 }).filter(p => p.medicine_name);
@@ -219,7 +248,7 @@ const ProductTable = () => {
     };
 
     return (
-        <div className="bg-white rounded-2xl p-6 mx-8 mb-6 border border-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] relative overflow-hidden flex flex-col h-full">
+        <div className="bg-white rounded-2xl p-6 mx-8 mb-6 border border-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] relative">
             {/* Header & Actions */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-gray-50 pb-5">
                 <div>
@@ -308,7 +337,7 @@ const ProductTable = () => {
             </div>
 
             {/* Table View */}
-            <div className="flex-1 overflow-auto rounded-xl border border-gray-100 custom-scrollbar relative">
+            <div className="overflow-x-auto rounded-xl border border-gray-100 custom-scrollbar relative w-full">
                 <table className="w-full text-left min-w-[1200px]">
                     <thead className="bg-[#fcfdfa] sticky top-0 z-10 border-b border-gray-100 shadow-sm">
                         <tr className="text-gray-500 text-[11px] uppercase tracking-wider font-bold">

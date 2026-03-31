@@ -1,5 +1,5 @@
 import Header from '../components/Header';
-import { TrendingUp, DollarSign, Activity, BrainCircuit } from 'lucide-react';
+import { TrendingUp, DollarSign, Activity } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
 
 const demandData = [
