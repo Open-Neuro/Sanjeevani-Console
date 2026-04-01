@@ -48,7 +48,7 @@ const CategoryCards = () => {
 
     if (loading) {
         return (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 px-8 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 {[1, 2, 3, 4].map((i) => (
                     <div key={i} className="h-32 bg-white rounded-xl border border-gray-100 animate-pulse p-4">
                         <div className="flex justify-between mb-4">
@@ -68,8 +68,7 @@ const CategoryCards = () => {
 
     if (categories.length === 0) {
         return (
-            <div className="px-8 mb-6">
-                <div className="bg-white border border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+            <div className="bg-white border border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center text-center">
                     <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-3">
                         <Box size={24} className="text-gray-300" />
                     </div>
@@ -78,12 +77,11 @@ const CategoryCards = () => {
                         Connect your inventory or add products to see real-time category distribution here.
                     </p>
                 </div>
-            </div>
         );
     }
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 px-8 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             {categories.map((cat, i) => (
                 <div
                     key={i}

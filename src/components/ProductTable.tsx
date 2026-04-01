@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Upload, Filter, Activity, ShieldAlert, Loader2, Plus, X, Package, Download, FileSpreadsheet, CheckCircle2, AlertCircle, Edit, Trash2, Edit3, Save } from 'lucide-react';
 import { fetchProducts, addProduct, bulkAddProducts } from '../services/api';
 import * as XLSX from 'xlsx';
@@ -53,12 +54,13 @@ const ProductTable = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Bulk Entry Mode (Spreadsheet-like)
+    const navigate = useNavigate();
     const [isBulkEntryOpen, setIsBulkEntryOpen] = useState(false);
     const [bulkEntries, setBulkEntries] = useState<any[]>([]);
 
     const loadProducts = async () => {
         try {
-            const data = await fetchProducts(page, 10, search, category);
+            const data = await fetchProducts(page, 100, search, category);
             // Apply client-side filters if needed, though usually backend handles it
             let filtered = data.data || [];
             
@@ -248,12 +250,12 @@ const ProductTable = () => {
     };
 
     return (
-        <div className="bg-white rounded-2xl p-6 mx-8 mb-6 border border-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] relative">
+        <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] relative">
             {/* Header & Actions */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-gray-50 pb-5">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3 border-b border-gray-50 pb-4">
                 <div>
-                    <h2 className="text-xl font-bold text-[#0a2e2a]">Inventory Master</h2>
-                    <p className="text-sm text-gray-500 mt-1">Manage medicines, batches, and pricing</p>
+                    <h2 className="text-base font-bold text-[#0a2e2a]">Inventory Master</h2>
+                    <p className="text-xs text-gray-400 mt-0.5">Manage medicines, batches, and pricing</p>
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-3">
@@ -296,7 +298,7 @@ const ProductTable = () => {
             </div>
 
             {/* Filters & Search */}
-            <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
+            <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
                 <div className="flex items-center gap-4">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
@@ -338,18 +340,18 @@ const ProductTable = () => {
 
             {/* Table View */}
             <div className="overflow-x-auto rounded-xl border border-gray-100 custom-scrollbar relative w-full">
-                <table className="w-full text-left min-w-[1200px]">
-                    <thead className="bg-[#fcfdfa] sticky top-0 z-10 border-b border-gray-100 shadow-sm">
-                        <tr className="text-gray-500 text-[11px] uppercase tracking-wider font-bold">
-                            <th className="py-4 px-5">Product Details</th>
-                            <th className="py-4 px-4 w-32">Inventory</th>
-                            <th className="py-4 px-4">Batch & Expiry</th>
-                            <th className="py-4 px-4">Pricing (₹)</th>
-                            <th className="py-4 px-4">Regulatory</th>
-                            <th className="py-4 px-4 text-center">Actions</th>
+                <table className="w-full text-left min-w-[900px]">
+                    <thead className="bg-gray-50 sticky top-0 z-10 border-b border-gray-100">
+                        <tr className="text-gray-400 text-[10px] uppercase tracking-widest font-bold">
+                            <th className="py-2.5 px-4">Product</th>
+                            <th className="py-2.5 px-3 w-28">Inventory</th>
+                            <th className="py-2.5 px-3">Batch & Expiry</th>
+                            <th className="py-2.5 px-3 w-24">Pricing (₹)</th>
+                            <th className="py-2.5 px-3 w-28">Regulatory</th>
+                            <th className="py-2.5 px-3 w-32 text-center">Actions</th>
                         </tr>
                     </thead>
-                    <tbody className="text-sm divide-y divide-gray-50">
+                    <tbody className="divide-y divide-gray-50">
                         {products.length > 0 ? products.map((prod, i) => {
                             const stock = Number(prod["Current Stock"] || prod.stock || 0);
                             const schedule = prod["Schedule"] || prod.schedule || 'OTC';
@@ -358,111 +360,106 @@ const ProductTable = () => {
                             const sp = Number(prod["Selling Price"] || prod.selling_price || 0);
                             const batch = prod["Batch Number"] || prod.batch_no || '-';
                             const exp = prod["Expiry Date"] || prod.expiry_date || '-';
-                            
-                            let stockStatus = 'In Stock';
+
                             let stockColor = 'text-green-600';
                             let stockBg = 'bg-green-50';
-                            let stockBorder = 'border-green-100';
-
-                            if (stock === 0) {
-                                stockStatus = 'Out of Stock';
-                                stockColor = 'text-red-600';
-                                stockBg = 'bg-red-50';
-                                stockBorder = 'border-red-100';
-                            } else if (stock < 20) {
-                                stockStatus = 'Low Stock';
-                                stockColor = 'text-orange-600';
-                                stockBg = 'bg-orange-50';
-                                stockBorder = 'border-orange-100';
-                            }
+                            let stockLabel = 'In Stock';
+                            if (stock === 0) { stockColor = 'text-red-600'; stockBg = 'bg-red-50'; stockLabel = 'Out of Stock'; }
+                            else if (stock < 20) { stockColor = 'text-orange-500'; stockBg = 'bg-orange-50'; stockLabel = 'Low Stock'; }
 
                             return (
-                                <tr key={i} className="group bg-white hover:bg-blue-50/30 transition-all duration-200">
-                                    {/* Product Details */}
-                                    <td className="py-3 px-5 border-l-2 border-transparent group-hover:border-[#bbed3b]">
-                                        <div className="flex flex-col">
-                                            <span className="font-bold text-[#0a2e2a] text-base group-hover:text-blue-700 transition-colors">
-                                                {prod["Medicine Name"] || prod.medicine_name}
+                                <tr key={i} className="group hover:bg-gray-50/60 transition-colors">
+                                    {/* Product */}
+                                    <td className="py-2.5 px-4 border-l-2 border-transparent group-hover:border-[#bbed3b]">
+                                        <p className="text-[13px] font-semibold text-[#0a2e2a] leading-tight">
+                                            {prod["Medicine Name"] || prod.medicine_name}
+                                        </p>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className="text-[10px] text-gray-400 font-mono">
+                                                ID: {prod["Product ID"] || `M-${i + 1000}`}
                                             </span>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">
-                                                    ID: {prod["Product ID"] || `M-8${i}21`}
-                                                </span>
-                                                {prod["Brand Name"] && <span className="text-xs text-gray-500 truncate max-w-[150px]">{prod["Brand Name"]}</span>}
-                                            </div>
-                                            <span className="text-xs text-gray-400 mt-0.5 truncate max-w-[200px]" title={prod["Generic Name"] || prod.generic_name}>
-                                                {prod["Generic Name"] || prod.generic_name || <span className="italic text-gray-300">No Generic Info</span>}
-                                            </span>
+                                            {prod["Brand Name"] && (
+                                                <span className="text-[10px] text-gray-400 truncate max-w-[100px]">· {prod["Brand Name"]}</span>
+                                            )}
                                         </div>
+                                        {(prod["Generic Name"] || prod.generic_name) && (
+                                            <p className="text-[10px] text-gray-400 truncate max-w-[180px] mt-0.5">
+                                                {prod["Generic Name"] || prod.generic_name}
+                                            </p>
+                                        )}
                                     </td>
 
                                     {/* Inventory */}
-                                    <td className="py-3 px-4">
-                                        <div className={`inline-flex flex-col items-start px-2.5 py-1.5 rounded-lg border ${stockBg} ${stockBorder}`}>
-                                            <span className={`text-sm font-black ${stockColor}`}>
-                                                {stock} Unit{stock !== 1 && 's'}
+                                    <td className="py-2.5 px-3">
+                                        <span className={`inline-flex flex-col px-2 py-1 rounded-md ${stockBg}`}>
+                                            <span className={`text-[12px] font-bold ${stockColor} leading-tight`}>
+                                                {stock} Units
                                             </span>
-                                            <span className={`text-[9px] font-bold uppercase ${stockColor} opacity-80 mt-0.5`}>
-                                                {stockStatus}
+                                            <span className={`text-[9px] font-semibold uppercase ${stockColor} opacity-80`}>
+                                                {stockLabel}
                                             </span>
-                                        </div>
+                                        </span>
                                     </td>
 
                                     {/* Batch & Expiry */}
-                                    <td className="py-3 px-4">
-                                        <div className="flex flex-col gap-1">
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="text-xs text-gray-400 font-medium w-8">B/N:</span>
-                                                <span className="text-sm font-medium text-gray-700 font-mono tracking-tight">{batch}</span>
-                                            </div>
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="text-xs text-gray-400 font-medium w-8">EXP:</span>
-                                                <span className={`text-sm font-medium ${filterStatus==='expiring' ? 'text-red-600 font-bold' : 'text-gray-700'}`}>{exp}</span>
-                                            </div>
-                                        </div>
+                                    <td className="py-2.5 px-3">
+                                        <p className="text-[11px] text-gray-600">
+                                            <span className="text-gray-400 font-medium">B/N: </span>
+                                            <span className="font-mono">{batch}</span>
+                                        </p>
+                                        <p className="text-[11px] text-gray-600 mt-0.5">
+                                            <span className="text-gray-400 font-medium">EXP: </span>
+                                            <span className={filterStatus === 'expiring' ? 'text-red-500 font-semibold' : ''}>{exp}</span>
+                                        </p>
                                     </td>
 
                                     {/* Pricing */}
-                                    <td className="py-3 px-4">
-                                        <div className="flex flex-col">
-                                            {(mrp > 0 || sp > 0) ? (
-                                                <>
-                                                    <span className="text-sm font-bold text-gray-800">₹{sp > 0 ? sp.toFixed(2) : mrp.toFixed(2)}</span>
-                                                    {mrp > sp && sp > 0 && <span className="text-[10px] text-gray-400 line-through">MRP ₹{mrp.toFixed(2)}</span>}
-                                                </>
-                                            ) : (
-                                                <span className="text-xs text-gray-300 italic">Not set</span>
-                                            )}
-                                        </div>
+                                    <td className="py-2.5 px-3">
+                                        {(mrp > 0 || sp > 0) ? (
+                                            <>
+                                                <p className="text-[13px] font-bold text-gray-800">
+                                                    ₹{sp > 0 ? sp.toFixed(2) : mrp.toFixed(2)}
+                                                </p>
+                                                {mrp > sp && sp > 0 && (
+                                                    <p className="text-[10px] text-gray-400 line-through">₹{mrp.toFixed(2)}</p>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <span className="text-[11px] text-gray-300 italic">—</span>
+                                        )}
                                     </td>
 
                                     {/* Regulatory */}
-                                    <td className="py-3 px-4">
-                                        <div className="flex flex-col items-start gap-1.5">
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border 
-                                                ${schedule === 'OTC' ? 'bg-gray-50 text-gray-600 border-gray-200' : 
-                                                 schedule === 'H' || schedule === 'H1' ? 'bg-orange-50 text-orange-700 border-orange-200' : 
-                                                 'bg-red-50 text-red-700 border-red-200'}`}
-                                            >
-                                                Sch: {schedule}
-                                            </span>
-                                            {reqRx && (
-                                                <span className="text-[9px] font-bold uppercase tracking-wider text-purple-600 flex items-center gap-1">
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></div>
-                                                    Rx Reqd
-                                                </span>
-                                            )}
-                                        </div>
+                                    <td className="py-2.5 px-3">
+                                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold border
+                                            ${schedule === 'OTC' ? 'bg-gray-50 text-gray-500 border-gray-200' :
+                                              schedule === 'H' || schedule === 'H1' ? 'bg-orange-50 text-orange-600 border-orange-200' :
+                                              'bg-red-50 text-red-600 border-red-200'}`}
+                                        >
+                                            {schedule}
+                                        </span>
+                                        {reqRx && (
+                                            <p className="text-[9px] text-purple-500 font-semibold mt-1 flex items-center gap-1">
+                                                <span className="w-1 h-1 rounded-full bg-purple-400 inline-block" />
+                                                Rx
+                                            </p>
+                                        )}
                                     </td>
 
-                                    {/* Actions */}
-                                    <td className="py-3 px-4 text-center">
-                                        <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                                                <Edit size={16} />
+                                    {/* Actions — always visible, compact */}
+                                    <td className="py-2.5 px-3">
+                                        <div className="flex items-center justify-center gap-1">
+                                            <button
+                                                onClick={() => navigate(`/products/${prod.id || prod['Product ID']}`)}
+                                                className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                                            >
+                                                <Edit size={12} /> Edit
                                             </button>
-                                            <button className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                                                <Trash2 size={16} />
+                                            <button
+                                                onClick={() => navigate(`/products/${prod.id || prod['Product ID']}/delete`)}
+                                                className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                                            >
+                                                <Trash2 size={12} /> Del
                                             </button>
                                         </div>
                                     </td>
@@ -470,13 +467,14 @@ const ProductTable = () => {
                             );
                         }) : (
                             <tr>
-                                <td colSpan={6} className="py-24 text-center">
-                                    <div className="flex flex-col items-center gap-3">
-                                        <div className="p-4 bg-gray-50 rounded-full border border-gray-100">
-                                            <Package size={32} className="text-gray-300" />
-                                        </div>
-                                        <p className="text-base font-bold text-gray-500">No inventory found matching criteria</p>
-                                        <p className="text-xs text-gray-400 max-w-sm mt-1">Try adjusting your search or filters, or import new medicines to populate the catalog.</p>
+                                <td colSpan={6} className="py-16 text-center">
+                                    <div className="flex flex-col items-center gap-2">
+                                        <Package size={28} className="text-gray-200" />
+                                        <p className="text-sm font-semibold text-gray-400">No inventory found</p>
+                                        <p className="text-xs text-gray-300">
+                                            Try adjusting filters or{' '}
+                                            <button className="text-blue-500 hover:underline" onClick={() => setIsModalOpen(true)}>add a product</button>
+                                        </p>
                                     </div>
                                 </td>
                             </tr>
@@ -485,28 +483,12 @@ const ProductTable = () => {
                 </table>
             </div>
 
-            {/* Pagination Footer */}
+            {/* Footer — count only, no pagination buttons */}
             <div className="mt-4 flex items-center justify-between text-xs text-gray-500 border-t border-gray-50 pt-4">
                 <p>Showing <span className="font-bold text-gray-800">{products.length}</span> of <span className="font-bold text-gray-800">{total}</span> items</p>
-                <div className="flex items-center gap-1">
-                    <button
-                        onClick={() => setPage(p => Math.max(1, p - 1))}
-                        disabled={page === 1}
-                        className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-                    >
-                        Previous
-                    </button>
-                    <div className="px-4 py-1.5 font-bold text-gray-800 bg-gray-50 rounded-lg border border-gray-100">
-                        {page}
-                    </div>
-                    <button
-                        onClick={() => setPage(p => p + 1)}
-                        disabled={products.length < 10}
-                        className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-                    >
-                        Next
-                    </button>
-                </div>
+                {total > products.length && (
+                    <span className="text-[11px] text-gray-400 italic">Scroll to see all entries</span>
+                )}
             </div>
 
             {/* ====== MODALS ====== */}

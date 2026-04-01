@@ -11,10 +11,7 @@ import {
     ChevronLeft,
     ChevronRight,
     Sparkles,
-    Settings,
     LogOut,
-    Shield,
-    Database,
     ExternalLink,
     Terminal,
     Gem,
@@ -22,7 +19,6 @@ import {
     Users2,
     Receipt,
     HelpCircle,
-    Info,
     ChevronDown,
     ChevronUp,
 } from 'lucide-react';
@@ -53,7 +49,7 @@ const Sidebar = () => {
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const { user, logout } = useAuth();
     const activeApiBaseUrl = getApiBaseUrl();
-    const configuredApiBaseUrl = getConfiguredApiBaseUrl();
+    void getConfiguredApiBaseUrl; // unused but kept for future use
     
     // Rely exclusively on backend user object
     const pharmacyName = user?.pharmacy_name || "Sanjeevani Admin";
