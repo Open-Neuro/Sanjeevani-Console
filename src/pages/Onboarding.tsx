@@ -17,6 +17,8 @@ export default function Onboarding() {
         storeType: "Retail Pharmacy",
         phone: "",
         address: "",
+        lat: "",
+        lng: "",
         plan: ""
     });
 
@@ -34,6 +36,8 @@ export default function Onboarding() {
             store_type: formData.storeType,
             phone_number: formData.phone,
             address: formData.address,
+            lat: formData.lat ? parseFloat(formData.lat) : null,
+            lng: formData.lng ? parseFloat(formData.lng) : null,
             subscription_plan: selectedPlan.toLowerCase() 
         };
 
@@ -163,6 +167,32 @@ export default function Onboarding() {
                         placeholder="Enter full address for billing and deliveries..." 
                     />
                 </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1.5">Latitude</label>
+                        <input 
+                            type="number" 
+                            step="any"
+                            value={formData.lat}
+                            onChange={e => setFormData({ ...formData, lat: e.target.value })}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#bbed3b] focus:bg-white transition-all text-sm font-semibold"
+                            placeholder="e.g. 19.1380" 
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1.5">Longitude</label>
+                        <input 
+                            type="number" 
+                            step="any"
+                            value={formData.lng}
+                            onChange={e => setFormData({ ...formData, lng: e.target.value })}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#bbed3b] focus:bg-white transition-all text-sm font-semibold"
+                            placeholder="e.g. 77.3180" 
+                        />
+                    </div>
+                </div>
+                <p className="text-xs text-blue-500 font-medium">✨ Tip: Copy latitude and longitude from Google Maps for best accuracy.</p>
                 
                 <div className="flex gap-4 mt-8">
                     <button 

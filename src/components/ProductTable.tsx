@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Upload, Filter, Activity, ShieldAlert, Loader2, Plus, X, Package, Download, FileSpreadsheet, CheckCircle2, AlertCircle, Edit, Trash2, Edit3, Save } from 'lucide-react';
+import { Search, Upload, Filter, Activity, ShieldAlert, Loader2, Plus, X, Package, Download, FileSpreadsheet, CheckCircle2, AlertCircle, Edit, Trash2, Edit3, Save, ScanLine } from 'lucide-react';
 import { fetchProducts, addProduct, bulkAddProducts } from '../services/api';
 import * as XLSX from 'xlsx';
 
@@ -9,7 +9,7 @@ const SCHEDULES = ['OTC', 'H', 'H1', 'X'];
 const ProductTable = () => {
     const [products, setProducts] = useState<any[]>([]);
     const [total, setTotal] = useState(0);
-    const [page, setPage] = useState(1);
+    const [page] = useState(1);
     const [search, setSearch] = useState('');
     const [category] = useState('');
     const [filterStatus, setFilterStatus] = useState<'all' | 'low_stock' | 'expiring'>('all');
@@ -57,6 +57,61 @@ const ProductTable = () => {
     const navigate = useNavigate();
     const [isBulkEntryOpen, setIsBulkEntryOpen] = useState(false);
     const [bulkEntries, setBulkEntries] = useState<any[]>([]);
+
+    const parseScannedMedicine = (raw: string) => {
+        const cleaned = raw.trim();
+        if (!cleaned) return null;
+
+        try {
+            const maybeJson = JSON.parse(cleaned);
+            if (maybeJson && typeof maybeJson === 'object') {
+                const obj = maybeJson as Record<string, any>;
+                const medicineName = String(
+                    obj.medicine_name ?? obj.name ?? obj.medicine ?? ''
+                ).trim();
+                const stock = Number(obj.stock ?? obj.qty ?? 10) || 10;
+                const category = String(obj.category ?? 'General').trim() || 'General';
+                if (medicineName) {
+                    return { medicine_name: medicineName, stock, category };
+                }
+            }
+        } catch {
+            // Intentionally ignore and continue with text parsing.
+        }
+
+        const segments = cleaned.split('|').map(part => part.trim()).filter(Boolean);
+        if (segments.length > 0) {
+            const stockGuess = segments.length > 1 ? Number(segments[1]) : 10;
+            return {
+                medicine_name: segments[0],
+                stock: Number.isFinite(stockGuess) && stockGuess >= 0 ? stockGuess : 10,
+                category: segments.length > 2 ? segments[2] : 'General',
+            };
+        }
+
+        return { medicine_name: cleaned, stock: 10, category: 'General' };
+    };
+
+    const handleScanAndAdd = () => {
+        const raw = window.prompt(
+            'Scan or paste code here.\nSupported formats:\n1) Medicine|Stock|Category\n2) JSON: {"medicine_name":"...", "stock":10, "category":"..."}'
+        );
+        if (!raw) return;
+
+        const parsed = parseScannedMedicine(raw);
+        if (!parsed || !parsed.medicine_name) {
+            return;
+        }
+
+        setNewProduct(prev => ({
+            ...prev,
+            medicine_name: parsed.medicine_name,
+            stock: parsed.stock,
+            category: parsed.category,
+        }));
+        setQuickAddMode(true);
+        setIsModalOpen(true);
+    };
 
     const loadProducts = async () => {
         try {
@@ -287,6 +342,13 @@ const ProductTable = () => {
                         className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-100 text-blue-700 rounded-xl font-medium text-sm hover:bg-blue-100 transition-colors shadow-sm"
                     >
                         <Edit3 size={16} /> Bulk Entry
+                    </button>
+                    <button
+                        onClick={handleScanAndAdd}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-xl font-medium text-sm hover:bg-emerald-100 transition-colors shadow-sm"
+                        title="Scan QR/Barcode and pre-fill product form"
+                    >
+                        <ScanLine size={16} /> Scan & Add
                     </button>
                     <button
                         onClick={() => { setIsModalOpen(true); setQuickAddMode(false); }}
