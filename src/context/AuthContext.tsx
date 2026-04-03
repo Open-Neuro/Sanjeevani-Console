@@ -95,13 +95,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [loading, setLoading] = useState(!user || !token);
 
     const fetchProfile = useCallback(async (authToken: string) => {
-        console.log("AuthProvider: Fetching profile...");
+        const authBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'https://sanjeevani-auth.onrender.com';
+        const url = `${authBaseUrl}/auth/me`;
+        console.log(`AuthProvider: Fetching profile from ${url}...`);
         try {
-            const authBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'https://sanjeevani-auth.onrender.com';
             const response = await fetchWithTimeout(
-                `${authBaseUrl}/auth/me`,
+                url,
                 { headers: { 'Authorization': `Bearer ${authToken}` } },
-                8000
+                25000
             );
 
             if (response.ok) {
@@ -112,13 +113,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 localStorage.setItem('sanjeevani_user', JSON.stringify(finalUser));
                 return finalUser;
             } else if (response.status === 401 || response.status === 403 || response.status === 404) {
-                console.error(`AuthProvider: Session invalid or user not found (HTTP ${response.status}). Clearing storage.`);
+                console.error(`AuthProvider: Session invalid (HTTP ${response.status}) at ${url}. Clearing storage.`);
                 logout();
             } else {
-                console.error(`AuthProvider: API returned error status: ${response.status} ${response.statusText}`);
+                console.error(`AuthProvider: API error ${response.status} at ${url}`);
             }
         } catch (e) {
-            console.error("AuthProvider: Profile fetch failed:", e);
+            console.error(`AuthProvider: Profile fetch failed at ${url}:`, e);
         }
         return null;
     }, []);
@@ -135,7 +136,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, [token, fetchProfile]);
 
     const login = async (newToken: string, profile: UserProfile): Promise<UserProfile | null> => {
-        console.log("AuthProvider: Login triggered");
+        console.log("AuthProvider: Login triggered - Setting token immediately");
         localStorage.setItem('sanjeevani_token', newToken);
         setToken(newToken);
         
@@ -145,6 +146,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setLoading(false);
             return profile;
         } else {
+            // We set loading true to show the sync screen, but token is already in state
             setLoading(true);
             const fetchedUser = await fetchProfile(newToken);
             setLoading(false);
