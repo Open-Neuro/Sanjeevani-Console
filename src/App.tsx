@@ -1,5 +1,5 @@
 
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import Products from './pages/Products';
 import Overview from './pages/Overview';
 import Orders from './pages/Orders';
@@ -68,11 +68,12 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 // Token bridge: if backend redirects to "/?token=...", move internally to callback route.
 const AuthTokenBridge = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
-  const params = new URLSearchParams(location.search);
-  const token = params.get('token');
+  const routeParams = new URLSearchParams(location.search);
+  const browserParams = new URLSearchParams(window.location.search);
+  const token = routeParams.get('token') || browserParams.get('token');
 
   if (token) {
-    return <Navigate to={`/auth/callback${location.search}`} replace />;
+    return <Navigate to={`/auth/callback?token=${encodeURIComponent(token)}`} replace />;
   }
 
   return <>{children}</>;
