@@ -15,7 +15,7 @@ import MainLayout from './components/MainLayout';
 import { AuthProvider } from './context/AuthContext';
 
 import { useAuth } from './context/AuthContext';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
 // Protected Route Wrapper - Redirects to login if not authenticated
 // Also handles onboarding redirect if profile is incomplete
@@ -65,6 +65,19 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+// Token bridge: if backend redirects to "/?token=...", move internally to callback route.
+const AuthTokenBridge = ({ children }: { children: React.ReactNode }) => {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token');
+
+  if (token) {
+    return <Navigate to={`/auth/callback${location.search}`} replace />;
+  }
+
+  return <>{children}</>;
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -72,8 +85,8 @@ function App() {
         <div className="font-sans antialiased text-gray-900 bg-[#f4f7f6] min-h-screen">
           <Routes>
             {/* Public Routes */}
-            <Route path="/" element={<PublicRoute><SignUp /></PublicRoute>} />
-            <Route path="/login" element={<PublicRoute><SignUp /></PublicRoute>} />
+            <Route path="/" element={<AuthTokenBridge><PublicRoute><SignUp /></PublicRoute></AuthTokenBridge>} />
+            <Route path="/login" element={<AuthTokenBridge><PublicRoute><SignUp /></PublicRoute></AuthTokenBridge>} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             
             {/* Onboarding Route */}
