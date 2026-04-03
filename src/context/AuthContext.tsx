@@ -26,7 +26,7 @@ export interface UserProfile {
 interface AuthContextType {
     user: UserProfile | null;
     token: string | null;
-    login: (token: string, profile: UserProfile) => void;
+    login: (token: string, profile: UserProfile) => Promise<UserProfile | null>;
     logout: () => void;
     updateUser: (data: Partial<UserProfile>) => void;
     loading: boolean;
@@ -34,7 +34,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const fetchWithTimeout = (url: string, options: RequestInit, timeoutMs = 8000) => {
+const fetchWithTimeout = (url: string, options: RequestInit, timeoutMs = 25000) => {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
     return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(id));
@@ -107,13 +107,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             if (response.ok) {
                 const userData = await response.json();
                 const finalUser = userData.user || userData;
-                console.log("AuthProvider: Profile fetched:", finalUser.email);
+                console.log("AuthProvider: Profile fetched successfully for:", finalUser.email);
                 setUser(finalUser);
                 localStorage.setItem('sanjeevani_user', JSON.stringify(finalUser));
                 return finalUser;
             } else if (response.status === 401 || response.status === 403 || response.status === 404) {
-                console.warn(`AuthProvider: Session invalid or user not found (${response.status}). Clearing.`);
+                console.error(`AuthProvider: Session invalid or user not found (HTTP ${response.status}). Clearing storage.`);
                 logout();
+            } else {
+                console.error(`AuthProvider: API returned error status: ${response.status} ${response.statusText}`);
             }
         } catch (e) {
             console.error("AuthProvider: Profile fetch failed:", e);
@@ -132,7 +134,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         initAuth();
     }, [token, fetchProfile]);
 
-    const login = async (newToken: string, profile: UserProfile) => {
+    const login = async (newToken: string, profile: UserProfile): Promise<UserProfile | null> => {
         console.log("AuthProvider: Login triggered");
         localStorage.setItem('sanjeevani_token', newToken);
         setToken(newToken);
@@ -141,10 +143,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setUser(profile);
             localStorage.setItem('sanjeevani_user', JSON.stringify(profile));
             setLoading(false);
+            return profile;
         } else {
             setLoading(true);
-            await fetchProfile(newToken);
+            const fetchedUser = await fetchProfile(newToken);
             setLoading(false);
+            return fetchedUser;
         }
     };
 

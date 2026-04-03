@@ -35,25 +35,36 @@ const AuthCallback = () => {
                 }
 
                 if (token) {
+                    console.log('AuthCallback: Token found, attempting login...');
                     // Store token and trigger context update
                     // Note: AuthContext will now fetch and wait for the real profile
-                    await login(token, {}); 
+                    const user = await login(token, {}); 
                     
-                    // Redirect to root, where App.tsx routing will handle the logic
-                    navigate('/', { replace: true });
+                    if (user) {
+                        console.log('AuthCallback: Login successful, navigating to dashboard');
+                        // Redirect to root, where App.tsx routing will handle the logic
+                        navigate('/', { replace: true });
+                    } else {
+                        console.error('AuthCallback: Failed to fetch user profile.');
+                        setError('We received your login, but could not load your profile. The server might be slow (cold start).');
+                        setTimeout(() => {
+                            navigate('/login', { replace: true });
+                        }, 5000);
+                    }
                 } else {
                     // No token found, redirect to login
-                    setError('Authentication failed. No token received.');
+                    console.error('AuthCallback: No token found in URL.');
+                    setError('Authentication failed. No token received from the login service.');
                     setTimeout(() => {
                         navigate('/login', { replace: true });
-                    }, 2000);
+                    }, 3000);
                 }
             } catch (err) {
-                console.error('Auth callback error:', err);
-                setError('Authentication failed. Please try again.');
+                console.error('AuthCallback: Unexpected error during handling:', err);
+                setError('A technical error occurred during sign in. Please check your internet connection.');
                 setTimeout(() => {
                     navigate('/login', { replace: true });
-                }, 2000);
+                }, 4000);
             }
         };
 
