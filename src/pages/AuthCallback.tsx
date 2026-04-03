@@ -53,7 +53,7 @@ const AuthCallback = () => {
                 if (user) {
                     setStatus('finalizing');
                     setDebugInfo('Profile fetched! Redirecting to dashboard...');
-                    setTimeout(() => navigate('/', { replace: true }), 500);
+                    setTimeout(() => navigate('/dashboard', { replace: true }), 300);
                 } else {
                     console.error('AuthCallback: Failed to fetch user profile.');
                     setDebugInfo('Profile fetch failed or timed out. You might be offline or the server is waking up.');

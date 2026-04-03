@@ -34,6 +34,24 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const extractTokenFromUrl = (): string | null => {
+    try {
+        const searchToken = new URLSearchParams(window.location.search).get('token');
+        if (searchToken) return searchToken;
+
+        const hash = window.location.hash || '';
+        const hashQueryIndex = hash.indexOf('?');
+        if (hashQueryIndex >= 0) {
+            const hashQuery = hash.substring(hashQueryIndex + 1);
+            const hashToken = new URLSearchParams(hashQuery).get('token');
+            if (hashToken) return hashToken;
+        }
+    } catch (e) {
+        console.error('AuthProvider: failed to parse token from URL', e);
+    }
+    return null;
+};
+
 const fetchWithTimeout = (url: string, options: RequestInit, timeoutMs = 25000) => {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -82,6 +100,7 @@ const AuthLoadingScreen = () => (
 );
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+    const urlToken = extractTokenFromUrl();
     const [user, setUser] = useState<UserProfile | null>(() => {
         const cachedUser = localStorage.getItem('sanjeevani_user');
         try {
@@ -91,8 +110,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             return null;
         }
     });
-    const [token, setToken] = useState<string | null>(localStorage.getItem('sanjeevani_token'));
-    const [loading, setLoading] = useState(!user || !token);
+    const [token, setToken] = useState<string | null>(() => {
+        const localToken = localStorage.getItem('sanjeevani_token');
+        const activeToken = localToken || urlToken;
+        if (activeToken && activeToken !== localToken) {
+            localStorage.setItem('sanjeevani_token', activeToken);
+        }
+        return activeToken;
+    });
+    const [loading, setLoading] = useState(Boolean(localStorage.getItem('sanjeevani_token') || urlToken));
 
     const fetchProfile = useCallback(async (authToken: string) => {
         const authBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'https://sanjeevani-auth.onrender.com';
@@ -126,13 +152,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     // Initial load
     useEffect(() => {
-        const initAuth = async () => {
-            if (token) {
-                await fetchProfile(token);
+        let mounted = true;
+        const watchdog = window.setTimeout(() => {
+            if (mounted) {
+                console.warn("AuthProvider: loading watchdog triggered. Releasing UI.");
+                setLoading(false);
             }
-            setLoading(false);
+        }, 8000);
+
+        const initAuth = async () => {
+            try {
+                if (token) {
+                    await fetchProfile(token);
+                }
+            } finally {
+                if (mounted) {
+                    setLoading(false);
+                }
+            }
         };
+
         initAuth();
+
+        return () => {
+            mounted = false;
+            window.clearTimeout(watchdog);
+        };
     }, [token, fetchProfile]);
 
     const login = async (newToken: string, profile: UserProfile): Promise<UserProfile | null> => {
