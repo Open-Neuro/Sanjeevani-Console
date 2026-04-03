@@ -20,8 +20,19 @@ interface Toast {
     message: string;
 }
 
+interface Order {
+    order_id: string;
+    customer_name: string;
+    order_channel: string;
+    product_name: string;
+    quantity: number;
+    total_amount: number;
+    order_status: string;
+    [key: string]: any;
+}
+
 const Orders = () => {
-    const [orders, setOrders] = useState<any[]>([]);
+    const [orders, setOrders] = useState<Order[]>([]);
     const [page] = useState(1);
     const [total, setTotal] = useState(0);
     const [search, setSearch] = useState('');

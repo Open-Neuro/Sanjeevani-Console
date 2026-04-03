@@ -87,20 +87,6 @@ const DemoOverview = () => {
         );
     }
 
-    const NavItem = ({ icon: Icon, label, id }: { icon: any, label: string, id: string }) => (
-        <button 
-            onClick={() => setActiveView(id)}
-            className={`w-full flex items-center gap-4 px-6 py-4 transition-all duration-300 group
-                ${activeView === id ? 'bg-[#bbed3b] text-[#0a2e2a]' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
-        >
-            <Icon size={20} className={`${activeView === id ? 'scale-110' : 'group-hover:translate-x-1'} transition-transform`} />
-            <span className={`text-sm font-black tracking-wide uppercase ${activeView === id ? 'opacity-100' : 'opacity-70'}`}>
-                {label}
-            </span>
-            {activeView === id && <ChevronRight size={16} className="ml-auto" />}
-        </button>
-    );
-
     return (
         <div className="h-screen w-full bg-[#fafbfd] flex overflow-hidden font-sans">
             
@@ -117,16 +103,16 @@ const DemoOverview = () => {
                 </div>
 
                 <nav className="flex-1 mt-4">
-                    <NavItem icon={LayoutDashboard} label="Live Monitoring" id="overview" />
-                    <NavItem icon={Package} label="Smart Inventory" id="inventory" />
-                    <NavItem icon={ShoppingBag} label="Order Streams" id="orders" />
-                    <NavItem icon={BrainCircuit} label="AI Intelligence" id="intelligence" />
-                    <NavItem icon={Users} label="Chronic Patients" id="patients" />
+                    <NavItem icon={LayoutDashboard} label="Live Monitoring" id="overview" activeView={activeView} setActiveView={setActiveView} />
+                    <NavItem icon={Package} label="Smart Inventory" id="inventory" activeView={activeView} setActiveView={setActiveView} />
+                    <NavItem icon={ShoppingBag} label="Order Streams" id="orders" activeView={activeView} setActiveView={setActiveView} />
+                    <NavItem icon={BrainCircuit} label="AI Intelligence" id="intelligence" activeView={activeView} setActiveView={setActiveView} />
+                    <NavItem icon={Users} label="Chronic Patients" id="patients" activeView={activeView} setActiveView={setActiveView} />
                     
                     <div className="mx-6 my-8 border-t border-white/5"></div>
                     
-                    <NavItem icon={CreditCard} label="Settlements" id="payments" />
-                    <NavItem icon={Settings} label="System Config" id="settings" />
+                    <NavItem icon={CreditCard} label="Settlements" id="payments" activeView={activeView} setActiveView={setActiveView} />
+                    <NavItem icon={Settings} label="System Config" id="settings" activeView={activeView} setActiveView={setActiveView} />
                 </nav>
 
                 <div className="p-6">
@@ -456,5 +442,19 @@ const DemoOverview = () => {
         </div>
     );
 };
+
+const NavItem = ({ icon: Icon, label, id, activeView, setActiveView }: { icon: any, label: string, id: string, activeView: string, setActiveView: (id: string) => void }) => (
+    <button
+        onClick={() => setActiveView(id)}
+        className={`w-full flex items-center gap-4 px-6 py-4 transition-all duration-300 group
+            ${activeView === id ? 'bg-[#bbed3b] text-[#0a2e2a]' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+    >
+        <Icon size={20} className={`${activeView === id ? 'scale-110' : 'group-hover:translate-x-1'} transition-transform`} />
+        <span className={`text-sm font-black tracking-wide uppercase ${activeView === id ? 'opacity-100' : 'opacity-70'}`}>
+            {label}
+        </span>
+        {activeView === id && <ChevronRight size={16} className="ml-auto" />}
+    </button>
+);
 
 export default DemoOverview;

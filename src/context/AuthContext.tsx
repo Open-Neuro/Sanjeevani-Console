@@ -94,6 +94,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [token, setToken] = useState<string | null>(localStorage.getItem('sanjeevani_token'));
     const [loading, setLoading] = useState(!user || !token);
 
+    const logout = useCallback(() => {
+        console.log("AuthProvider: Logging out...");
+        localStorage.removeItem('sanjeevani_token');
+        localStorage.removeItem('sanjeevani_user');
+        setToken(null);
+        setUser(null);
+        setTimeout(() => {
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login';
+            }
+        }, 100);
+    }, []);
+
     const fetchProfile = useCallback(async (authToken: string) => {
         console.log("AuthProvider: Fetching profile...");
         try {
@@ -119,7 +132,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             console.error("AuthProvider: Profile fetch failed:", e);
         }
         return null;
-    }, []);
+    }, [logout]);
 
     // Initial load
     useEffect(() => {
@@ -156,19 +169,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
             return newUser;
         });
-    };
-
-    const logout = () => {
-        console.log("AuthProvider: Logging out...");
-        localStorage.removeItem('sanjeevani_token');
-        localStorage.removeItem('sanjeevani_user');
-        setToken(null);
-        setUser(null);
-        setTimeout(() => {
-            if (window.location.pathname !== '/login') {
-                window.location.href = '/login';
-            }
-        }, 100);
     };
 
     return (

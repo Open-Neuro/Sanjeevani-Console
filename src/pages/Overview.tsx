@@ -21,13 +21,39 @@ import {
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
+interface DashboardOverview {
+    total_patients: number;
+    total_orders: number;
+    active_alerts: number;
+    low_stock_items: number;
+}
+
+interface OperationalStatus {
+    agent_run_count: number;
+    latest_agent_run_status: string;
+    latest_agent_run_at: string;
+    data_presence: {
+        has_orders: boolean;
+        has_patients: boolean;
+        has_products: boolean;
+        has_inventory: boolean;
+    };
+    collections: Array<{
+        name: string;
+        collection: string;
+        count: number;
+        is_populated: boolean;
+    }>;
+    latest_agent_runs: any[];
+}
+
 const Overview = () => {
     const { user } = useAuth();
-    const [overview, setOverview] = useState<any>(null);
+    const [overview, setOverview] = useState<DashboardOverview | null>(null);
     const [refills, setRefills] = useState<any[]>([]);
     const [orders, setOrders] = useState<any[]>([]);
     const [timeSeries, setTimeSeries] = useState<any[]>([]);
-    const [opsStatus, setOpsStatus] = useState<any>(null);
+    const [opsStatus, setOpsStatus] = useState<OperationalStatus | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [modalLoading, setModalLoading] = useState(false);

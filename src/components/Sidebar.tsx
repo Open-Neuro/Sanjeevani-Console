@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import SanjeevaniLogo from './SanjeevaniLogo';
-import { getApiBaseUrl, getConfiguredApiBaseUrl, isUsingLocal, switchToLocal, switchToDeployed } from '../utils/apiConfig';
+import { getApiBaseUrl, isUsingLocal, switchToLocal, switchToDeployed } from '../utils/apiConfig';
 
 /* ─── Nav items ─────────────────────────────────────── */
 const NAV_MAIN = [
@@ -49,7 +49,6 @@ const Sidebar = () => {
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const { user, logout } = useAuth();
     const activeApiBaseUrl = getApiBaseUrl();
-    void getConfiguredApiBaseUrl; // unused but kept for future use
     
     // Rely exclusively on backend user object
     const pharmacyName = user?.pharmacy_name || "Sanjeevani Admin";
