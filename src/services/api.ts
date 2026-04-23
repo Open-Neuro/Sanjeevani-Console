@@ -112,6 +112,17 @@ export const fetchProducts = async (page = 1, pageSize = 20, search = '', catego
     return response.json();
 };
 
+export const searchProducts = async (query = '', barcode = '', limit = 20) => {
+    const params = new URLSearchParams();
+    if (query) params.set('q', query);
+    if (barcode) params.set('barcode', barcode);
+    params.set('limit', String(limit));
+
+    const response = await authFetch(`${API_BASE_URL}/products/search?${params.toString()}`);
+    if (!response.ok) throw new Error('Failed to search products');
+    return response.json();
+};
+
 export const addProduct = async (product: any) => {
     const response = await authFetch(`${API_BASE_URL}/products/`, {
         method: 'POST',
@@ -128,6 +139,62 @@ export const bulkAddProducts = async (products: any[]) => {
     });
     if (!response.ok) throw new Error('Failed to bulk add products');
     return response.json();
+};
+
+export const applyStockActions = async (payload: any, idempotencyKey?: string) => {
+    const response = await authFetch(`${API_BASE_URL}/products/stock-actions`, {
+        method: 'POST',
+        headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+        body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok || data.status === 'error') {
+        throw new Error(data.detail || data.message || 'Failed to apply stock action');
+    }
+    return data;
+};
+
+export const counterScan = async (payload: any) => {
+    const response = await authFetch(`${API_BASE_URL}/products/counter/scan`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok || data.status === 'error') {
+        throw new Error(data.detail || data.message || 'Failed to resolve barcode');
+    }
+    return data;
+};
+
+export const confirmCounterSale = async (payload: any, idempotencyKey?: string) => {
+    const response = await authFetch(`${API_BASE_URL}/products/counter/confirm-sale`, {
+        method: 'POST',
+        headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+        body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok || data.status === 'error') {
+        throw new Error(data.detail || data.message || 'Failed to confirm counter sale');
+    }
+    return data;
+};
+
+export const fetchProductBatches = async (productId: string) => {
+    const response = await authFetch(`${API_BASE_URL}/products/${encodeURIComponent(productId)}/batches`);
+    const data = await response.json();
+    if (!response.ok || data.status === 'error') {
+        throw new Error(data.detail || data.message || 'Failed to fetch product batches');
+    }
+    return data;
+};
+
+export const fetchProductLedger = async (productId: string) => {
+    const response = await authFetch(`${API_BASE_URL}/products/${encodeURIComponent(productId)}/ledger`);
+    const data = await response.json();
+    if (!response.ok || data.status === 'error') {
+        throw new Error(data.detail || data.message || 'Failed to fetch product ledger');
+    }
+    return data;
 };
 
 export const fetchCustomers = async (page = 1, pageSize = 20, search = '') => {

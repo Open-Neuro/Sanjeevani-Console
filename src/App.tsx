@@ -1,6 +1,7 @@
 
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import Products from './pages/Products';
+import AdminPanel from './pages/AdminPanel';
 import Overview from './pages/Overview';
 import Orders from './pages/Orders';
 import Sales from './pages/Sales';
@@ -73,7 +74,12 @@ const AuthTokenBridge = ({ children }: { children: React.ReactNode }) => {
   const token = routeParams.get('token') || browserParams.get('token');
 
   if (token) {
-    return <Navigate to={`/auth/callback?token=${encodeURIComponent(token)}`} replace />;
+    // Store token briefly, then immediately clean URL so JWT is never visible in address bar.
+    sessionStorage.setItem('sanjeevani_oauth_token', token);
+    const cleanHashPath = (window.location.hash || '#/').split('?')[0];
+    const cleanUrl = `${window.location.pathname}${cleanHashPath}`;
+    window.history.replaceState({}, document.title, cleanUrl);
+    return <Navigate to="/auth/callback" replace />;
   }
 
   return <>{children}</>;
@@ -86,6 +92,7 @@ function App() {
         <div className="font-sans antialiased text-gray-900 bg-[#f4f7f6] min-h-screen">
           <Routes>
             {/* Public Routes */}
+            <Route path="/admin" element={<AdminPanel />} />
             <Route path="/" element={<AuthTokenBridge><PublicRoute><SignUp /></PublicRoute></AuthTokenBridge>} />
             <Route path="/login" element={<AuthTokenBridge><PublicRoute><SignUp /></PublicRoute></AuthTokenBridge>} />
             <Route path="/auth/callback" element={<AuthCallback />} />

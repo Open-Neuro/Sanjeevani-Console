@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MoreVertical, Pill, Droplet, Check, Zap, Target, HeartPulse, Sparkles, Activity, Box } from 'lucide-react';
+import { MoreVertical, Pill, Droplet, Check, Zap, Target, HeartPulse, Sparkles, Activity } from 'lucide-react';
 import { fetchDashboardProducts } from '../services/api';
 
 const CategoryCards = () => {
@@ -67,17 +67,7 @@ const CategoryCards = () => {
     }
 
     if (categories.length === 0) {
-        return (
-            <div className="bg-white border border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center text-center">
-                    <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-3">
-                        <Box size={24} className="text-gray-300" />
-                    </div>
-                    <h3 className="text-sm font-bold text-gray-900">No Inventory Data Yet</h3>
-                    <p className="text-xs text-gray-500 max-w-xs mt-1">
-                        Connect your inventory or add products to see real-time category distribution here.
-                    </p>
-                </div>
-        );
+        return null;
     }
 
     return (

@@ -101,6 +101,8 @@ const AuthLoadingScreen = () => (
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const urlToken = extractTokenFromUrl();
+    const storedToken = localStorage.getItem('sanjeevani_token');
+    const isOAuthCallbackFlow = Boolean(urlToken && urlToken !== storedToken);
     const [user, setUser] = useState<UserProfile | null>(() => {
         const cachedUser = localStorage.getItem('sanjeevani_user');
         try {
@@ -111,14 +113,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     });
     const [token, setToken] = useState<string | null>(() => {
-        const localToken = localStorage.getItem('sanjeevani_token');
-        const activeToken = localToken || urlToken;
-        if (activeToken && activeToken !== localToken) {
+        const activeToken = storedToken || urlToken;
+        if (activeToken && activeToken !== storedToken) {
             localStorage.setItem('sanjeevani_token', activeToken);
         }
         return activeToken;
     });
-    const [loading, setLoading] = useState(Boolean(localStorage.getItem('sanjeevani_token') || urlToken));
+    // Show the full-screen auth loader only during fresh OAuth callback flow.
+    // On regular refresh with an existing local session, we hydrate silently in background.
+    const [loading, setLoading] = useState(isOAuthCallbackFlow);
 
     const fetchProfile = useCallback(async (authToken: string) => {
         const authBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'https://sanjeevani-auth.onrender.com';

@@ -1,973 +1,665 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, Upload, Filter, Activity, ShieldAlert, Loader2, Plus, X, Package, Download, FileSpreadsheet, CheckCircle2, AlertCircle, Edit, Trash2, Edit3, Save, ScanLine } from 'lucide-react';
-import { fetchProducts, addProduct, bulkAddProducts } from '../services/api';
-import * as XLSX from 'xlsx';
+import { useEffect, useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react';
+import {
+  AlertCircle,
+  Check,
+  Loader2,
+  Package,
+  Plus,
+  Search,
+  ShoppingCart,
+  X,
+} from 'lucide-react';
+import { addProduct, fetchProducts } from '../services/api';
 
-const SCHEDULES = ['OTC', 'H', 'H1', 'X'];
- 
-const ProductTable = () => {
-    const [products, setProducts] = useState<any[]>([]);
-    const [total, setTotal] = useState(0);
-    const [page] = useState(1);
-    const [search, setSearch] = useState('');
-    const [category] = useState('');
-    const [filterStatus, setFilterStatus] = useState<'all' | 'low_stock' | 'expiring'>('all');
-    
-    /* ─── DUMMY DATA FOR DEMO ─── */
-    const DUMMY_PRODUCTS: any[] = [
-        { "Medicine Name": "Augmentin 625 Duo", "Category": "Antibiotics", "Current Stock": 5, "Batch Number": "AUG-221", "Expiry Date": "2024-08-12", "MRP": 210, "Selling Price": 195, "Schedule": "H", "Prescription Required": true },
-        { "Medicine Name": "Pan D Capsule", "Category": "Antacids", "Current Stock": 12, "Batch Number": "PAN-005", "Expiry Date": "2025-01-20", "MRP": 185, "Selling Price": 165, "Schedule": "H", "Prescription Required": true },
-        { "Medicine Name": "Dolo 650mg", "Category": "Analgesics", "Current Stock": 450, "Batch Number": "DOL-884", "Expiry Date": "2025-06-15", "MRP": 30, "Selling Price": 28, "Schedule": "OTC", "Prescription Required": false },
-        { "Medicine Name": "Zifi 200mg", "Category": "Antibiotics", "Current Stock": 18, "Batch Number": "ZIF-112", "Expiry Date": "2024-11-30", "MRP": 155, "Selling Price": 140, "Schedule": "H", "Prescription Required": true },
-        { "Medicine Name": "Lipitor 10mg", "Category": "Statins", "Current Stock": 8, "Batch Number": "LIP-334", "Expiry Date": "2024-05-10", "MRP": 450, "Selling Price": 410, "Schedule": "H", "Prescription Required": true },
-        { "Medicine Name": "Metformin 500mg", "Category": "Anti-Diabetic", "Current Stock": 200, "Batch Number": "MET-771", "Expiry Date": "2025-12-01", "MRP": 15, "Selling Price": 12, "Schedule": "H", "Prescription Required": true },
-        { "Medicine Name": "Amlodipine 5mg", "Category": "Hypertension", "Current Stock": 150, "Batch Number": "AML-445", "Expiry Date": "2025-03-22", "MRP": 85, "Selling Price": 75, "Schedule": "H", "Prescription Required": true },
-        { "Medicine Name": "Azithromycin 500mg", "Category": "Antibiotics", "Current Stock": 45, "Batch Number": "AZI-992", "Expiry Date": "2024-12-15", "MRP": 120, "Selling Price": 105, "Schedule": "H", "Prescription Required": true },
-        { "Medicine Name": "Vicks Action 500", "Category": "Cold & Flu", "Current Stock": 85, "Batch Number": "VIC-111", "Expiry Date": "2025-05-10", "MRP": 45, "Selling Price": 42, "Schedule": "OTC", "Prescription Required": false },
-        { "Medicine Name": "Shelcal 500mg", "Category": "Supplements", "Current Stock": 110, "Batch Number": "SHE-223", "Expiry Date": "2025-08-20", "MRP": 115, "Selling Price": 95, "Schedule": "OTC", "Prescription Required": false },
-    ];
-    /* ─────────────────────────── */
+type PackBreakdown = { box: number; strip: number; unit: number };
 
-    void DUMMY_PRODUCTS;
-
-    // Add product modal state
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [quickAddMode, setQuickAddMode] = useState(false);
-    
-    // Initial State for Product
-    const initialProductState = { 
-        medicine_name: '', category: 'General', stock: 0, 
-        generic_name: '', brand_name: '', batch_no: '', 
-        expiry_date: '', mrp: 0, selling_price: 0, 
-        schedule: 'OTC', prescription_required: false 
-    };
-    
-    const [newProduct, setNewProduct] = useState(initialProductState);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
-    // Bulk import state (Excel)
-    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-    const [importData, setImportData] = useState<any[]>([]);
-    const [isImporting, setIsImporting] = useState(false);
-    const [importError, setImportError] = useState<string | null>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    // Bulk Entry Mode (Spreadsheet-like)
-    const navigate = useNavigate();
-    const [isBulkEntryOpen, setIsBulkEntryOpen] = useState(false);
-    const [bulkEntries, setBulkEntries] = useState<any[]>([]);
-
-    const parseScannedMedicine = (raw: string) => {
-        const cleaned = raw.trim();
-        if (!cleaned) return null;
-
-        try {
-            const maybeJson = JSON.parse(cleaned);
-            if (maybeJson && typeof maybeJson === 'object') {
-                const obj = maybeJson as Record<string, any>;
-                const medicineName = String(
-                    obj.medicine_name ?? obj.name ?? obj.medicine ?? ''
-                ).trim();
-                const stock = Number(obj.stock ?? obj.qty ?? 10) || 10;
-                const category = String(obj.category ?? 'General').trim() || 'General';
-                if (medicineName) {
-                    return { medicine_name: medicineName, stock, category };
-                }
-            }
-        } catch {
-            // Intentionally ignore and continue with text parsing.
-        }
-
-        const segments = cleaned.split('|').map(part => part.trim()).filter(Boolean);
-        if (segments.length > 0) {
-            const stockGuess = segments.length > 1 ? Number(segments[1]) : 10;
-            return {
-                medicine_name: segments[0],
-                stock: Number.isFinite(stockGuess) && stockGuess >= 0 ? stockGuess : 10,
-                category: segments.length > 2 ? segments[2] : 'General',
-            };
-        }
-
-        return { medicine_name: cleaned, stock: 10, category: 'General' };
-    };
-
-    const handleScanAndAdd = () => {
-        const raw = window.prompt(
-            'Scan or paste code here.\nSupported formats:\n1) Medicine|Stock|Category\n2) JSON: {"medicine_name":"...", "stock":10, "category":"..."}'
-        );
-        if (!raw) return;
-
-        const parsed = parseScannedMedicine(raw);
-        if (!parsed || !parsed.medicine_name) {
-            return;
-        }
-
-        setNewProduct(prev => ({
-            ...prev,
-            medicine_name: parsed.medicine_name,
-            stock: parsed.stock,
-            category: parsed.category,
-        }));
-        setQuickAddMode(true);
-        setIsModalOpen(true);
-    };
-
-    const loadProducts = async () => {
-        try {
-            const data = await fetchProducts(page, 100, search, category);
-            // Apply client-side filters if needed, though usually backend handles it
-            let filtered = data.data || [];
-            
-            if (filterStatus === 'low_stock') {
-                filtered = filtered.filter((p: any) => {
-                    const stock = Number(p["Current Stock"] || p.stock || 0);
-                    return stock < 20;
-                });
-            } else if (filterStatus === 'expiring') {
-                // Rough filter for expiring soon assuming proper date format
-                filtered = filtered.filter((p: any) => {
-                    const exp = p["Expiry Date"] || p.expiry_date;
-                    if (!exp) return false;
-                    const expDate = new Date(exp);
-                    const now = new Date();
-                    const diffTime = Math.abs(expDate.getTime() - now.getTime());
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-                    return diffDays < 90 && expDate > now;
-                });
-            }
-
-            setProducts(filtered);
-            setTotal(data.total || 0);
-        } catch (err) {
-            console.error("Error fetching products:", err);
-            setProducts([]);
-            setTotal(0);
-        }
-    };
-
-    useEffect(() => {
-        const timeoutId = setTimeout(loadProducts, 300); // Debounce search
-        return () => clearTimeout(timeoutId);
-    }, [page, search, category, filterStatus]);
-
-    // Update prescription logic automatically based on schedule
-    useEffect(() => {
-        if (newProduct.schedule === 'OTC') {
-            setNewProduct(prev => ({ ...prev, prescription_required: false }));
-        } else {
-            setNewProduct(prev => ({ ...prev, prescription_required: true }));
-        }
-    }, [newProduct.schedule]);
-
-    const handleAddProduct = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newProduct.medicine_name.trim()) return;
-        try {
-            setIsSubmitting(true);
-            await addProduct(newProduct);
-            setIsModalOpen(false);
-            setNewProduct(initialProductState);
-            loadProducts(); // Refresh list
-        } catch (err) {
-            console.error("Error adding product:", err);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-            try {
-                const bstr = evt.target?.result;
-                const wb = XLSX.read(bstr, { type: 'binary' });
-                const wsname = wb.SheetNames[0];
-                const ws = wb.Sheets[wsname];
-                const data = XLSX.utils.sheet_to_json(ws);
-                
-                // Helper to format Excel date numbers
-                const formatExcelDate = (val: any) => {
-                    if (typeof val === 'number') {
-                        // Excel serial date to JS Date
-                        const date = new Date(Math.round((val - 25569) * 86400 * 1000));
-                        return date.toISOString().split('T')[0];
-                    }
-                    return val ? String(val) : '';
-                };
-
-                // Transform data to match API
-                const transformedData = data.map((row: any) => {
-                    const schedule = row['Schedule'] || row['schedule'] || 'OTC';
-                    return {
-                        medicine_name: String(row['Medicine Name'] || row['Name'] || row['medicine_name'] || ''),
-                        category: String(row['Category'] || row['category'] || 'General'),
-                        stock: parseInt(row['Stock'] || row['Current Stock'] || row['stock'] || 0),
-                        generic_name: String(row['Generic Name'] || row['generic_name'] || ''),
-                        brand_name: String(row['Brand Name'] || row['brand_name'] || ''),
-                        batch_no: String(row['Batch No'] || row['Batch Number'] || row['batch_no'] || ''),
-                        expiry_date: formatExcelDate(row['Expiry Date'] || row['expiry_date']),
-                        mrp: parseFloat(row['MRP'] || row['mrp'] || 0),
-                        selling_price: parseFloat(row['Selling Price'] || row['selling_price'] || row['Price'] || 0),
-                        schedule: String(schedule),
-                        prescription_required: schedule !== 'OTC'
-                    };
-                }).filter(p => p.medicine_name);
-
-                setImportData(transformedData);
-                setIsImportModalOpen(transformedData.length > 0);
-                if (transformedData.length === 0) {
-                    setImportError("No valid product data found in the file.");
-                }
-            } catch (err) {
-                console.error("Error parsing Excel:", err);
-                setImportError("Failed to parse the file. Please ensure it's a valid Excel or CSV file.");
-            }
-        };
-        reader.readAsBinaryString(file);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-    };
-
-    const handleBulkImport = async () => {
-        try {
-            setIsImporting(true);
-            setImportError(null);
-            await bulkAddProducts(importData);
-            setIsImportModalOpen(false);
-            setImportData([]);
-            loadProducts();
-        } catch (err: any) {
-            console.error("Error in bulk import:", err);
-            setImportError(err.message || "Bulk import failed.");
-        } finally {
-            setIsImporting(false);
-        }
-    };
-
-    const downloadTemplate = () => {
-        const template = [
-            {
-                'Medicine Name': 'Example Medicine 500mg',
-                'Category': 'Analgesic',
-                'Stock': 100,
-                'Generic Name': 'Acetaminophen',
-                'Brand Name': 'PharmaCare',
-                'Batch Number': 'BCH-1002',
-                'Expiry Date': '2026-12-31',
-                'MRP': 50.00,
-                'Selling Price': 45.00,
-                'Schedule': 'OTC'
-            }
-        ];
-        const ws = XLSX.utils.json_to_sheet(template);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Products Template");
-        XLSX.writeFile(wb, "Sanjeevani_Product_Template.xlsx");
-    };
-
-    // Bulk Entry table handlers
-    const addBulkRow = () => {
-        setBulkEntries([...bulkEntries, { ...initialProductState }]);
-    };
-
-    const removeBulkRow = (index: number) => {
-        setBulkEntries(bulkEntries.filter((_, i) => i !== index));
-    };
-
-    const updateBulkRow = (index: number, field: string, value: any) => {
-        const newEntries = [...bulkEntries];
-        newEntries[index] = { ...newEntries[index], [field]: value };
-        // Auto-update prescription required based on schedule
-        if (field === 'schedule') {
-             newEntries[index].prescription_required = value !== 'OTC';
-        }
-        setBulkEntries(newEntries);
-    };
-
-    const handleSaveBulkEntry = async () => {
-        const validEntries = bulkEntries.filter(e => e.medicine_name.trim() !== '');
-        if (validEntries.length === 0) return;
-        
-        try {
-            setIsImporting(true);
-            await bulkAddProducts(validEntries);
-            setIsBulkEntryOpen(false);
-            setBulkEntries([]);
-            loadProducts();
-        } catch(err) {
-            console.error("Failed bulk save:", err);
-        } finally {
-            setIsImporting(false);
-        }
-    };
-
-    return (
-        <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] relative">
-            {/* Header & Actions */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3 border-b border-gray-50 pb-4">
-                <div>
-                    <h2 className="text-base font-bold text-[#0a2e2a]">Inventory Master</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">Manage medicines, batches, and pricing</p>
-                </div>
-                
-                <div className="flex flex-wrap items-center gap-3">
-                    <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileChange}
-                        accept=".xlsx, .xls, .csv"
-                        className="hidden"
-                    />
-                    <button 
-                        onClick={downloadTemplate}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl font-medium text-sm hover:bg-gray-50 transition-colors shadow-sm"
-                        title="Download Excel Template"
-                    >
-                        <Download size={16} /> Template
-                    </button>
-                    <button 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border border-gray-200 text-gray-800 rounded-xl font-medium text-sm hover:bg-gray-100 transition-colors shadow-sm"
-                    >
-                        <Upload size={16} /> Import
-                    </button>
-                    <button 
-                        onClick={() => {
-                            if (bulkEntries.length === 0) addBulkRow();
-                            setIsBulkEntryOpen(true);
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-100 text-blue-700 rounded-xl font-medium text-sm hover:bg-blue-100 transition-colors shadow-sm"
-                    >
-                        <Edit3 size={16} /> Bulk Entry
-                    </button>
-                    <button
-                        onClick={handleScanAndAdd}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-xl font-medium text-sm hover:bg-emerald-100 transition-colors shadow-sm"
-                        title="Scan QR/Barcode and pre-fill product form"
-                    >
-                        <ScanLine size={16} /> Scan & Add
-                    </button>
-                    <button
-                        onClick={() => { setIsModalOpen(true); setQuickAddMode(false); }}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-[#0a2e2a] text-[#bbed3b] border border-[#0a2e2a] rounded-xl font-bold text-sm hover:bg-[#133d39] transition-all shadow-md active:scale-95"
-                    >
-                        <Plus size={16} /> Add Product
-                    </button>
-                </div>
-            </div>
-
-            {/* Filters & Search */}
-            <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
-                <div className="flex items-center gap-4">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                        <input
-                            type="text"
-                            placeholder="Search by name, generic, or brand..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl w-72 text-sm focus:outline-none focus:ring-2 focus:ring-[#bbed3b] focus:bg-white transition-all shadow-sm"
-                        />
-                    </div>
-
-                    <div className="flex bg-gray-50 p-1 rounded-xl border border-gray-200 shadow-sm">
-                        <button 
-                            onClick={() => setFilterStatus('all')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filterStatus === 'all' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                            All Items
-                        </button>
-                        <button 
-                            onClick={() => setFilterStatus('low_stock')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${filterStatus === 'low_stock' ? 'bg-orange-50 text-orange-700 shadow border border-orange-100' : 'text-gray-500 hover:text-orange-600'}`}
-                        >
-                            <ShieldAlert size={12} /> Low Stock
-                        </button>
-                        <button 
-                            onClick={() => setFilterStatus('expiring')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${filterStatus === 'expiring' ? 'bg-red-50 text-red-700 shadow border border-red-100' : 'text-gray-500 hover:text-red-600'}`}
-                        >
-                            <Activity size={12} /> Expiring Soon
-                        </button>
-                    </div>
-                </div>
-                
-                <button className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl font-medium text-sm hover:bg-gray-50 transition-colors shadow-sm">
-                    <Filter size={16} /> Advanced Filters
-                </button>
-            </div>
-
-            {/* Table View */}
-            <div className="overflow-x-auto rounded-xl border border-gray-100 custom-scrollbar relative w-full">
-                <table className="w-full text-left min-w-[900px]">
-                    <thead className="bg-gray-50 sticky top-0 z-10 border-b border-gray-100">
-                        <tr className="text-gray-400 text-[10px] uppercase tracking-widest font-bold">
-                            <th className="py-2.5 px-4">Product</th>
-                            <th className="py-2.5 px-3 w-28">Inventory</th>
-                            <th className="py-2.5 px-3">Batch & Expiry</th>
-                            <th className="py-2.5 px-3 w-24">Pricing (₹)</th>
-                            <th className="py-2.5 px-3 w-28">Regulatory</th>
-                            <th className="py-2.5 px-3 w-32 text-center">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                        {products.length > 0 ? products.map((prod, i) => {
-                            const stock = Number(prod["Current Stock"] || prod.stock || 0);
-                            const schedule = prod["Schedule"] || prod.schedule || 'OTC';
-                            const reqRx = prod["Prescription Required"] || prod.prescription_required || (schedule !== 'OTC');
-                            const mrp = Number(prod["MRP"] || prod.mrp || 0);
-                            const sp = Number(prod["Selling Price"] || prod.selling_price || 0);
-                            const batch = prod["Batch Number"] || prod.batch_no || '-';
-                            const exp = prod["Expiry Date"] || prod.expiry_date || '-';
-
-                            let stockColor = 'text-green-600';
-                            let stockBg = 'bg-green-50';
-                            let stockLabel = 'In Stock';
-                            if (stock === 0) { stockColor = 'text-red-600'; stockBg = 'bg-red-50'; stockLabel = 'Out of Stock'; }
-                            else if (stock < 20) { stockColor = 'text-orange-500'; stockBg = 'bg-orange-50'; stockLabel = 'Low Stock'; }
-
-                            return (
-                                <tr key={i} className="group hover:bg-gray-50/60 transition-colors">
-                                    {/* Product */}
-                                    <td className="py-2.5 px-4 border-l-2 border-transparent group-hover:border-[#bbed3b]">
-                                        <p className="text-[13px] font-semibold text-[#0a2e2a] leading-tight">
-                                            {prod["Medicine Name"] || prod.medicine_name}
-                                        </p>
-                                        <div className="flex items-center gap-1.5 mt-0.5">
-                                            <span className="text-[10px] text-gray-400 font-mono">
-                                                ID: {prod["Product ID"] || `M-${i + 1000}`}
-                                            </span>
-                                            {prod["Brand Name"] && (
-                                                <span className="text-[10px] text-gray-400 truncate max-w-[100px]">· {prod["Brand Name"]}</span>
-                                            )}
-                                        </div>
-                                        {(prod["Generic Name"] || prod.generic_name) && (
-                                            <p className="text-[10px] text-gray-400 truncate max-w-[180px] mt-0.5">
-                                                {prod["Generic Name"] || prod.generic_name}
-                                            </p>
-                                        )}
-                                    </td>
-
-                                    {/* Inventory */}
-                                    <td className="py-2.5 px-3">
-                                        <span className={`inline-flex flex-col px-2 py-1 rounded-md ${stockBg}`}>
-                                            <span className={`text-[12px] font-bold ${stockColor} leading-tight`}>
-                                                {stock} Units
-                                            </span>
-                                            <span className={`text-[9px] font-semibold uppercase ${stockColor} opacity-80`}>
-                                                {stockLabel}
-                                            </span>
-                                        </span>
-                                    </td>
-
-                                    {/* Batch & Expiry */}
-                                    <td className="py-2.5 px-3">
-                                        <p className="text-[11px] text-gray-600">
-                                            <span className="text-gray-400 font-medium">B/N: </span>
-                                            <span className="font-mono">{batch}</span>
-                                        </p>
-                                        <p className="text-[11px] text-gray-600 mt-0.5">
-                                            <span className="text-gray-400 font-medium">EXP: </span>
-                                            <span className={filterStatus === 'expiring' ? 'text-red-500 font-semibold' : ''}>{exp}</span>
-                                        </p>
-                                    </td>
-
-                                    {/* Pricing */}
-                                    <td className="py-2.5 px-3">
-                                        {(mrp > 0 || sp > 0) ? (
-                                            <>
-                                                <p className="text-[13px] font-bold text-gray-800">
-                                                    ₹{sp > 0 ? sp.toFixed(2) : mrp.toFixed(2)}
-                                                </p>
-                                                {mrp > sp && sp > 0 && (
-                                                    <p className="text-[10px] text-gray-400 line-through">₹{mrp.toFixed(2)}</p>
-                                                )}
-                                            </>
-                                        ) : (
-                                            <span className="text-[11px] text-gray-300 italic">—</span>
-                                        )}
-                                    </td>
-
-                                    {/* Regulatory */}
-                                    <td className="py-2.5 px-3">
-                                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold border
-                                            ${schedule === 'OTC' ? 'bg-gray-50 text-gray-500 border-gray-200' :
-                                              schedule === 'H' || schedule === 'H1' ? 'bg-orange-50 text-orange-600 border-orange-200' :
-                                              'bg-red-50 text-red-600 border-red-200'}`}
-                                        >
-                                            {schedule}
-                                        </span>
-                                        {reqRx && (
-                                            <p className="text-[9px] text-purple-500 font-semibold mt-1 flex items-center gap-1">
-                                                <span className="w-1 h-1 rounded-full bg-purple-400 inline-block" />
-                                                Rx
-                                            </p>
-                                        )}
-                                    </td>
-
-                                    {/* Actions — always visible, compact */}
-                                    <td className="py-2.5 px-3">
-                                        <div className="flex items-center justify-center gap-1">
-                                            <button
-                                                onClick={() => navigate(`/products/${prod.id || prod['Product ID']}`)}
-                                                className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-                                            >
-                                                <Edit size={12} /> Edit
-                                            </button>
-                                            <button
-                                                onClick={() => navigate(`/products/${prod.id || prod['Product ID']}/delete`)}
-                                                className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
-                                            >
-                                                <Trash2 size={12} /> Del
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            );
-                        }) : (
-                            <tr>
-                                <td colSpan={6} className="py-16 text-center">
-                                    <div className="flex flex-col items-center gap-2">
-                                        <Package size={28} className="text-gray-200" />
-                                        <p className="text-sm font-semibold text-gray-400">No inventory found</p>
-                                        <p className="text-xs text-gray-300">
-                                            Try adjusting filters or{' '}
-                                            <button className="text-blue-500 hover:underline" onClick={() => setIsModalOpen(true)}>add a product</button>
-                                        </p>
-                                    </div>
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* Footer — count only, no pagination buttons */}
-            <div className="mt-4 flex items-center justify-between text-xs text-gray-500 border-t border-gray-50 pt-4">
-                <p>Showing <span className="font-bold text-gray-800">{products.length}</span> of <span className="font-bold text-gray-800">{total}</span> items</p>
-                {total > products.length && (
-                    <span className="text-[11px] text-gray-400 italic">Scroll to see all entries</span>
-                )}
-            </div>
-
-            {/* ====== MODALS ====== */}
-
-            {/* 1. Add Product Modal */}
-            {isModalOpen && (
-                <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[24px] w-full max-w-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-                        <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50/50">
-                            <div>
-                                <h2 className="text-xl font-bold text-[#0a2e2a]">Add Product Manually</h2>
-                                <p className="text-xs text-gray-500 mt-1">Complete the form below to add a medicine to inventory</p>
-                            </div>
-                            <div className="flex items-center gap-4">
-                                <label className="flex items-center gap-2 text-xs font-semibold text-gray-600 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm cursor-pointer">
-                                    <input 
-                                        type="checkbox" 
-                                        className="form-checkbox text-[#bbed3b] focus:ring-[#bbed3b] rounded"
-                                        checked={quickAddMode} 
-                                        onChange={(e) => setQuickAddMode(e.target.checked)} 
-                                    />
-                                    Quick Add Mode
-                                </label>
-                                <button onClick={() => setIsModalOpen(false)} className="p-2 bg-white hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-full border border-gray-100 shadow-sm transition-colors">
-                                    <X size={20} />
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-                            <form id="addProductForm" onSubmit={handleAddProduct} className="space-y-8">
-                                {/* Basic Info Section */}
-                                <div className="space-y-4">
-                                    <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-blue-500"></div> BASIC INFO
-                                    </h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        <div className="md:col-span-2">
-                                            <label className="block text-xs font-bold text-gray-600 mb-1.5 ml-1">Medicine Name <span className="text-red-500">*</span></label>
-                                            <input
-                                                required
-                                                value={newProduct.medicine_name}
-                                                onChange={e => setNewProduct({ ...newProduct, medicine_name: e.target.value })}
-                                                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#bbed3b] focus:bg-white transition-all text-sm font-semibold"
-                                                placeholder="e.g. Paracetamol 500mg"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-600 mb-1.5 ml-1">Category</label>
-                                            <input
-                                                value={newProduct.category}
-                                                onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
-                                                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#bbed3b] focus:bg-white transition-all text-sm"
-                                                placeholder="e.g. Analgesic"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-600 mb-1.5 ml-1">Initial Stock <span className="text-red-500">*</span></label>
-                                            <input
-                                                required
-                                                type="number" min="0"
-                                                value={newProduct.stock === 0 ? '' : newProduct.stock}
-                                                onChange={e => setNewProduct({ ...newProduct, stock: parseInt(e.target.value) || 0 })}
-                                                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#bbed3b] focus:bg-white transition-all text-sm font-semibold text-blue-700"
-                                                placeholder="0"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {!quickAddMode && (
-                                    <>
-                                        <hr className="border-gray-100" />
-                                        
-                                        {/* Product Details Section */}
-                                        <div className="space-y-4">
-                                            <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full bg-purple-500"></div> PRODUCT DETAILS
-                                            </h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                                <div>
-                                                    <label className="block text-xs font-bold text-gray-600 mb-1.5 ml-1">Generic Name</label>
-                                                    <input
-                                                        value={newProduct.generic_name}
-                                                        onChange={e => setNewProduct({ ...newProduct, generic_name: e.target.value })}
-                                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#bbed3b] focus:bg-white transition-all text-sm"
-                                                        placeholder="e.g. Acetaminophen"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-bold text-gray-600 mb-1.5 ml-1">Brand Name</label>
-                                                    <input
-                                                        value={newProduct.brand_name}
-                                                        onChange={e => setNewProduct({ ...newProduct, brand_name: e.target.value })}
-                                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#bbed3b] focus:bg-white transition-all text-sm"
-                                                        placeholder="e.g. Tylenol"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <hr className="border-gray-100" />
-
-                                        {/* Inventory Details Section */}
-                                        <div className="space-y-4">
-                                            <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full bg-orange-500"></div> INVENTORY & PRICING
-                                            </h3>
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-                                                <div className="col-span-2">
-                                                    <label className="block text-xs font-bold text-gray-600 mb-1.5 ml-1">Batch Number</label>
-                                                    <input
-                                                        value={newProduct.batch_no}
-                                                        onChange={e => setNewProduct({ ...newProduct, batch_no: e.target.value })}
-                                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#bbed3b] focus:bg-white transition-all text-sm font-mono tracking-tight"
-                                                        placeholder="e.g. BATCH-A123"
-                                                    />
-                                                </div>
-                                                <div className="col-span-2">
-                                                    <label className="block text-xs font-bold text-gray-600 mb-1.5 ml-1">Expiry Date</label>
-                                                    <input
-                                                        type="date"
-                                                        value={newProduct.expiry_date}
-                                                        onChange={e => setNewProduct({ ...newProduct, expiry_date: e.target.value })}
-                                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#bbed3b] focus:bg-white transition-all text-sm text-gray-700"
-                                                    />
-                                                </div>
-                                                <div className="col-span-2">
-                                                    <label className="block text-xs font-bold text-gray-600 mb-1.5 ml-1">MRP (₹)</label>
-                                                    <input
-                                                        type="number" step="0.01" min="0"
-                                                        value={newProduct.mrp === 0 ? '' : newProduct.mrp}
-                                                        onChange={e => setNewProduct({ ...newProduct, mrp: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#bbed3b] focus:bg-white transition-all text-sm"
-                                                        placeholder="0.00"
-                                                    />
-                                                </div>
-                                                <div className="col-span-2">
-                                                    <label className="block text-xs font-bold text-gray-600 mb-1.5 ml-1">Selling Price (₹)</label>
-                                                    <input
-                                                        type="number" step="0.01" min="0"
-                                                        value={newProduct.selling_price === 0 ? '' : newProduct.selling_price}
-                                                        onChange={e => setNewProduct({ ...newProduct, selling_price: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#bbed3b] focus:bg-white transition-all text-sm font-semibold text-green-700"
-                                                        placeholder="0.00"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <hr className="border-gray-100" />
-
-                                        {/* Regulatory Section */}
-                                        <div className="space-y-4">
-                                            <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full bg-red-500"></div> REGULATORY
-                                            </h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                                                <div>
-                                                    <label className="block text-xs font-bold text-gray-600 mb-1.5 ml-1">Schedule</label>
-                                                    <select
-                                                        value={newProduct.schedule}
-                                                        onChange={e => setNewProduct({ ...newProduct, schedule: e.target.value })}
-                                                        className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#bbed3b] transition-all text-sm font-medium"
-                                                    >
-                                                        {SCHEDULES.map(s => <option key={s} value={s}>{s}</option>)}
-                                                    </select>
-                                                </div>
-                                                <div className="flex flex-col justify-center pt-5">
-                                                    <label className="flex items-center gap-3 cursor-pointer">
-                                                        <input 
-                                                            type="checkbox" 
-                                                            className="w-5 h-5 form-checkbox text-purple-600 rounded-md border-gray-300 focus:ring-purple-500 transition-all"
-                                                            checked={newProduct.prescription_required}
-                                                            onChange={e => setNewProduct({ ...newProduct, prescription_required: e.target.checked })}
-                                                        />
-                                                        <div className="flex flex-col">
-                                                            <span className="text-sm font-bold text-gray-800">Prescription Required</span>
-                                                            <span className="text-[10px] text-gray-500">Check to restrict sales without Rx</span>
-                                                        </div>
-                                                    </label>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-                            </form>
-                        </div>
-                        
-                        <div className="p-6 border-t border-gray-100 bg-gray-50/50 flex gap-4">
-                            <button 
-                                type="button" 
-                                onClick={() => setIsModalOpen(false)} 
-                                className="flex-1 px-4 py-3 bg-white text-gray-700 border border-gray-200 rounded-xl font-bold text-sm hover:bg-gray-50 shadow-sm transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                type="submit" 
-                                form="addProductForm"
-                                disabled={isSubmitting} 
-                                className="flex-2 px-4 py-3 bg-[#0a2e2a] text-[#bbed3b] rounded-xl font-bold text-sm hover:bg-[#133d39] disabled:opacity-70 flex justify-center items-center gap-2 shadow-lg shadow-[#0a2e2a]/20 transition-all active:scale-95"
-                            >
-                                {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : (
-                                    <>
-                                        <Save size={18} /> Save Product
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* 2. Bulk Entry Modal (Spreadsheet style) */}
-            {isBulkEntryOpen && (
-                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[24px] w-full max-w-6xl shadow-2xl flex flex-col h-[85vh] overflow-hidden">
-                        <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50">
-                            <div>
-                                <h2 className="text-xl font-bold text-[#0a2e2a] flex items-center gap-2">
-                                    <Edit3 size={20} className="text-blue-500" /> Bulk Manual Entry
-                                </h2>
-                                <p className="text-xs text-gray-500 mt-1">Quickly rapidly add multiple products like a spreadsheet</p>
-                            </div>
-                            <button onClick={() => setIsBulkEntryOpen(false)} className="p-2 bg-white hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-full border border-gray-100 shadow-sm transition-colors">
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="flex-1 overflow-auto custom-scrollbar bg-gray-50 p-6">
-                            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-                                <table className="w-full text-left bg-white">
-                                    <thead className="bg-gray-100/50 border-b border-gray-200 sticky top-0 z-10">
-                                        <tr className="text-[11px] font-black uppercase text-gray-500 tracking-wider">
-                                            <th className="py-3 px-4 w-12 text-center">#</th>
-                                            <th className="py-3 px-4 min-w-[200px]">Medicine Name *</th>
-                                            <th className="py-3 px-3 w-28">Stock *</th>
-                                            <th className="py-3 px-3 min-w-[150px]">Batch No</th>
-                                            <th className="py-3 px-3 w-36">Expiry</th>
-                                            <th className="py-3 px-3 w-28">Price (₹)</th>
-                                            <th className="py-3 px-3 w-28">Schedule</th>
-                                            <th className="py-3 px-4 w-16 text-center">Del</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {bulkEntries.map((entry, idx) => (
-                                            <tr key={idx} className="hover:bg-blue-50/20 transition-colors">
-                                                <td className="py-2 px-4 text-center text-xs font-bold text-gray-400">{idx + 1}</td>
-                                                <td className="py-2 px-4">
-                                                    <input 
-                                                        type="text"
-                                                        value={entry.medicine_name} 
-                                                        onChange={(e) => updateBulkRow(idx, 'medicine_name', e.target.value)}
-                                                        className="w-full px-3 py-2 border border-transparent hover:border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded bg-transparent focus:bg-white text-sm font-semibold text-gray-800 transition-all placeholder:text-gray-300"
-                                                        placeholder="Name..."
-                                                    />
-                                                </td>
-                                                <td className="py-2 px-3">
-                                                    <input 
-                                                        type="number" min="0"
-                                                        value={entry.stock === 0 ? '' : entry.stock} 
-                                                        onChange={(e) => updateBulkRow(idx, 'stock', parseInt(e.target.value)||0)}
-                                                        className="w-full px-3 py-2 border border-transparent hover:border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded bg-transparent focus:bg-white text-sm font-semibold text-blue-700 transition-all"
-                                                        placeholder="0"
-                                                    />
-                                                </td>
-                                                <td className="py-2 px-3">
-                                                    <input 
-                                                        type="text"
-                                                        value={entry.batch_no} 
-                                                        onChange={(e) => updateBulkRow(idx, 'batch_no', e.target.value)}
-                                                        className="w-full px-3 py-2 border border-transparent hover:border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded bg-transparent focus:bg-white text-sm font-mono tracking-tight text-gray-600 transition-all"
-                                                        placeholder="Batch"
-                                                    />
-                                                </td>
-                                                <td className="py-2 px-3">
-                                                    <input 
-                                                        type="date"
-                                                        value={entry.expiry_date} 
-                                                        onChange={(e) => updateBulkRow(idx, 'expiry_date', e.target.value)}
-                                                        className="w-full px-3 py-2 border border-transparent hover:border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded bg-transparent focus:bg-white text-xs text-gray-600 transition-all"
-                                                    />
-                                                </td>
-                                                <td className="py-2 px-3">
-                                                    <input 
-                                                        type="number" step="0.01" min="0"
-                                                        value={entry.selling_price === 0 ? '' : entry.selling_price} 
-                                                        onChange={(e) => updateBulkRow(idx, 'selling_price', parseFloat(e.target.value)||0)}
-                                                        className="w-full px-3 py-2 border border-transparent hover:border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded bg-transparent focus:bg-white text-sm font-semibold text-green-700 transition-all"
-                                                        placeholder="0.00"
-                                                    />
-                                                </td>
-                                                <td className="py-2 px-3">
-                                                    <select 
-                                                        value={entry.schedule}
-                                                        onChange={(e) => updateBulkRow(idx, 'schedule', e.target.value)}
-                                                        className="w-full px-2 py-2 border border-transparent hover:border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded bg-transparent focus:bg-white text-xs font-bold transition-all text-gray-700"
-                                                    >
-                                                        {SCHEDULES.map(s => <option key={s} value={s}>{s}</option>)}
-                                                    </select>
-                                                </td>
-                                                <td className="py-2 px-4 text-center">
-                                                    <button onClick={() => removeBulkRow(idx)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors">
-                                                        <Trash2 size={14} />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                                <div className="p-3 bg-gray-50 border-t border-gray-100">
-                                    <button 
-                                        onClick={addBulkRow}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-bold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                    >
-                                        <Plus size={16} /> Add Row
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="p-6 border-t border-gray-100 bg-white flex justify-between items-center">
-                            <span className="text-sm font-bold text-gray-500">{bulkEntries.length} row(s) ready</span>
-                            <div className="flex gap-4">
-                                <button onClick={() => setIsBulkEntryOpen(false)} className="px-6 py-2.5 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition-colors">Cancel</button>
-                                <button 
-                                    onClick={handleSaveBulkEntry} 
-                                    disabled={isImporting || bulkEntries.filter(e => e.medicine_name.trim() !== '').length === 0}
-                                    className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-lg shadow-blue-600/20 flex items-center gap-2"
-                                >
-                                    {isImporting ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />} Save All Entries
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* 3. Bulk Import Preview Modal (Excel) */}
-            {isImportModalOpen && (
-                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[24px] p-8 w-full max-w-4xl shadow-2xl max-h-[90vh] flex flex-col">
-                        <div className="flex justify-between items-center mb-6">
-                            <div className="flex items-center gap-3">
-                                <div className="p-3 bg-blue-50 rounded-2xl text-blue-600">
-                                    <FileSpreadsheet size={24} />
-                                </div>
-                                <div>
-                                    <h2 className="text-2xl font-black text-[#0a2e2a] tracking-tight">Import Preview</h2>
-                                    <p className="text-gray-500 text-xs font-semibold uppercase tracking-widest mt-1">Found {importData.length} Valid Products in File</p>
-                                </div>
-                            </div>
-                            <button onClick={() => setIsImportModalOpen(false)} className="p-2 bg-white hover:bg-gray-100 rounded-full border border-gray-100 transition-colors text-gray-400 hover:text-gray-700">
-                                <X size={24} />
-                            </button>
-                        </div>
-
-                        {importError && (
-                            <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600">
-                                <AlertCircle size={20} />
-                                <p className="text-sm font-bold">{importError}</p>
-                            </div>
-                        )}
-
-                        <div className="flex-1 overflow-y-auto custom-scrollbar border border-gray-100 rounded-2xl mb-6 shadow-inner bg-gray-50/30">
-                            <table className="w-full text-left">
-                                <thead className="sticky top-0 bg-gray-100 z-10 border-b border-gray-200">
-                                    <tr className="text-[10px] font-black uppercase text-gray-500 tracking-widest">
-                                        <th className="py-3 px-6">Medicine Name</th>
-                                        <th className="py-3 px-4">Stock</th>
-                                        <th className="py-3 px-4">Batch/Exp</th>
-                                        <th className="py-3 px-4">Price</th>
-                                        <th className="py-3 px-4">Sch</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="text-sm divide-y divide-gray-100">
-                                    {importData.map((prod, idx) => (
-                                        <tr key={idx} className="hover:bg-white transition-colors">
-                                            <td className="py-3 px-6 font-bold text-[#0a2e2a]">{prod.medicine_name}</td>
-                                            <td className="py-3 px-4 font-black tracking-tight">{prod.stock}</td>
-                                            <td className="py-3 px-4 text-xs font-mono text-gray-600">
-                                                {prod.batch_no || '-'}<br/><span className="text-gray-400 font-sans">{prod.expiry_date}</span>
-                                            </td>
-                                            <td className="py-3 px-4 text-sm font-bold text-green-700">₹{prod.selling_price || prod.mrp || 0}</td>
-                                            <td className="py-3 px-4 text-xs font-bold text-purple-600">{prod.schedule}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <div className="flex gap-4">
-                            <button 
-                                onClick={() => setIsImportModalOpen(false)} 
-                                className="flex-1 px-6 py-4 bg-gray-100 text-gray-600 border border-gray-200 rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-gray-200 transition-all active:scale-95"
-                            >
-                                Cancel Import
-                            </button>
-                            <button 
-                                onClick={handleBulkImport}
-                                disabled={isImporting || importData.length === 0}
-                                className="flex-[2] px-6 py-4 bg-[#bbed3b] text-[#0a2e2a] rounded-2xl font-black uppercase tracking-widest text-[13px] hover:bg-[#aade2a] shadow-xl shadow-[#bbed3b]/20 disabled:opacity-70 flex justify-center items-center gap-2 active:scale-95 transition-all"
-                            >
-                                {isImporting ? <Loader2 className="animate-spin" size={20} /> : (
-                                    <>
-                                        <CheckCircle2 size={18} />
-                                        Commit {importData.length} Products
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
+type ProductRow = {
+  id?: string;
+  _id?: string;
+  medicine_name?: string;
+  generic_name?: string;
+  brand_name?: string;
+  category?: string;
+  packaging?: { levels?: { level: string; to_base_units: number; label?: string }[] };
+  stock_summary?: { available_base_units?: number; breakdown?: PackBreakdown };
+  stock_breakdown?: PackBreakdown;
+  batch_no?: string;
+  expiry_date?: string;
+  selling_price?: number;
+  mrp?: number;
+  schedule?: string;
+  prescription_required?: boolean;
+  barcodes?: { code: string; level: string; is_primary?: boolean }[];
+  "Medicine Name"?: string;
+  "Generic Name"?: string;
+  "Brand Name"?: string;
+  "Current Stock"?: number;
+  "Batch Number"?: string;
+  "Expiry Date"?: string;
+  "MRP"?: number;
+  "Selling Price"?: number;
+  "Schedule"?: string;
+  "Prescription Required"?: boolean;
+  "Product ID"?: string;
 };
 
+type ProductForm = {
+  medicine_name: string;
+  generic_name: string;
+  brand_name: string;
+  category: string;
+  stock: number;
+  batch_no: string;
+  expiry_date: string;
+  selling_price: number;
+  mrp: number;
+  schedule: string;
+  prescription_required: boolean;
+  packaging: {
+    base_uom: string;
+    levels: { level: 'unit' | 'strip' | 'box'; label: string; to_base_units: number }[];
+  };
+  barcode: string;
+};
+
+type BillItem = {
+  key: string;
+  product: ProductRow;
+  qty: number;
+};
+
+const SCHEDULES = ['OTC', 'H', 'H1', 'X'];
+
+const emptyForm = (): ProductForm => ({
+  medicine_name: '',
+  generic_name: '',
+  brand_name: '',
+  category: 'General',
+  stock: 0,
+  batch_no: '',
+  expiry_date: '',
+  selling_price: 0,
+  mrp: 0,
+  schedule: 'OTC',
+  prescription_required: false,
+  packaging: {
+    base_uom: 'unit',
+    levels: [
+      { level: 'unit', label: 'Unit', to_base_units: 1 },
+      { level: 'strip', label: 'Strip', to_base_units: 10 },
+      { level: 'box', label: 'Box', to_base_units: 100 },
+    ],
+  },
+  barcode: '',
+});
+
+const ProductTable = () => {
+  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'all' | 'low' | 'expiry'>('all');
+  const [selected, setSelected] = useState<Record<string, BillItem>>({});
+  const [cartOpen, setCartOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [form, setForm] = useState<ProductForm>(emptyForm());
+
+  const resolveName = (p: ProductRow) => p['Medicine Name'] || p.medicine_name || '';
+  const resolveDisplayName = (p: ProductRow) =>
+    resolveName(p) || p.brand_name || p['Brand Name'] || p.generic_name || p['Generic Name'] || 'Medicine';
+  const resolveId = (p: ProductRow) => String(p.id || p._id || p['Product ID'] || p.barcodes?.[0]?.code || '');
+  const getRowKey = (p: ProductRow, index: number) => {
+    const stable = resolveId(p);
+    if (stable) return stable;
+    const batch = p.batch_no || p['Batch Number'] || 'nobatch';
+    const expiry = p.expiry_date || p['Expiry Date'] || 'noexpiry';
+    return `${resolveName(p)}|${batch}|${expiry}|${index}`;
+  };
+  const resolveStock = (p: ProductRow) => Number(p.stock_summary?.available_base_units ?? p['Current Stock'] ?? 0);
+  const resolvePrice = (p: ProductRow) => Number(p.selling_price ?? p['Selling Price'] ?? p.mrp ?? p['MRP'] ?? 0);
+  const resolveExpiry = (p: ProductRow) => p.expiry_date || p['Expiry Date'] || '';
+  const getExpiryDays = (p: ProductRow) => {
+    const expiry = resolveExpiry(p);
+    if (!expiry) return null;
+    const diff = Math.ceil((new Date(expiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return Number.isNaN(diff) ? null : diff;
+  };
+
+  const loadProducts = async () => {
+    setLoading(true);
+    try {
+      const res = await fetchProducts(1, 1000, search);
+      setProducts((res.data || []) as ProductRow[]);
+    } catch (error) {
+      console.error(error);
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(loadProducts, 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const filteredProducts = useMemo(() => {
+    const next = products.filter((p) => {
+      const stock = resolveStock(p);
+      if (filter === 'low') return stock > 0 && stock < 20;
+      if (filter === 'expiry') {
+        const exp = resolveExpiry(p);
+        if (!exp) return false;
+        const days = getExpiryDays(p);
+        if (days === null) return false;
+        return days >= 0 && days <= 90;
+      }
+      return true;
+    });
+    if (filter === 'expiry') {
+      return next.sort((a, b) => (getExpiryDays(a) ?? 9999) - (getExpiryDays(b) ?? 9999));
+    }
+    return next;
+  }, [products, filter]);
+
+  const selectedItems = Object.values(selected);
+  const selectedCount = selectedItems.length;
+  const billTotal = selectedItems.reduce((sum, item) => sum + item.qty * resolvePrice(item.product), 0);
+  const toggleBillItem = (product: ProductRow, key: string) => {
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (next[key]) delete next[key];
+      else next[key] = { key, product, qty: 1 };
+      return next;
+    });
+  };
+
+  const setBillQty = (productId: string, qty: number) => {
+    setSelected((prev) => {
+      if (!prev[productId]) return prev;
+      return { ...prev, [productId]: { ...prev[productId], qty: Math.max(1, qty) } };
+    });
+  };
+
+  const removeBillItem = (productId: string) => {
+    setSelected((prev) => {
+      const next = { ...prev };
+      delete next[productId];
+      return next;
+    });
+  };
+
+  const resetForm = () => setForm(emptyForm());
+
+  const saveProduct = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    try {
+      await addProduct({
+        medicine_name: form.medicine_name,
+        generic_name: form.generic_name,
+        brand_name: form.brand_name,
+        category: form.category,
+        stock: form.stock,
+        batch_no: form.batch_no,
+        expiry_date: form.expiry_date,
+        selling_price: form.selling_price,
+        mrp: form.mrp,
+        schedule: form.schedule,
+        prescription_required: form.prescription_required,
+        packaging: form.packaging,
+        barcodes: form.barcode ? [{ code: form.barcode, level: 'unit', is_primary: true }] : undefined,
+      });
+      resetForm();
+      setDrawerOpen(false);
+      setMessage('Product added successfully');
+      await loadProducts();
+    } catch (error) {
+      console.error(error);
+      setMessage('Could not save product');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-[28px] border border-gray-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="inline-flex items-center gap-2 rounded-2xl bg-[#0a2e2a] px-3.5 py-2.5 text-sm font-semibold text-[#bbed3b]"
+            >
+              <Plus size={16} /> Add Product
+            </button>
+            <button
+              onClick={() => setCartOpen(true)}
+              className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm font-semibold text-emerald-800"
+            >
+              <ShoppingCart size={16} /> Cart {selectedCount > 0 ? `(${selectedCount})` : ''}
+            </button>
+            <button
+              onClick={() => setSelected({})}
+              className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium text-gray-700"
+            >
+              Clear Selection
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'low', label: 'Low Stock' },
+              { key: 'expiry', label: 'Expiry' },
+            ].map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setFilter(item.key as typeof filter)}
+                className={`rounded-full px-3.5 py-2 text-xs font-semibold tracking-wide transition ${
+                  filter === item.key
+                    ? 'bg-[#0a2e2a] text-white shadow-sm'
+                    : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600" size={17} />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search medicines, salt, brand, or barcode"
+              className="w-full rounded-[20px] border border-gray-200 bg-white py-3 pl-11 pr-4 text-[15px] text-gray-900 shadow-[0_1px_2px_rgba(16,24,40,0.04)] outline-none transition placeholder:text-gray-400 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+            />
+          </div>
+        </div>
+
+        {message && (
+          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+            <AlertCircle size={16} />
+            {message}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-[28px] border border-gray-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-400">Medicines</h3>
+            <p className="text-sm text-gray-500">Tap a row to add it to the cart.</p>
+          </div>
+          <span className="rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-600">{filteredProducts.length} shown</span>
+        </div>
+
+        {filter === 'expiry' && (
+          <div className="mb-3 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            Showing medicines expiring in the next 90 days, sorted by nearest expiry first.
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {loading ? (
+            <div className="flex items-center justify-center py-16 text-gray-400">
+              <Loader2 className="animate-spin" size={22} />
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-[24px] border border-dashed border-gray-200 bg-gray-50 py-16 text-center">
+              <Package size={34} className="text-gray-300" />
+              <p className="mt-3 text-sm font-medium text-gray-500">No products match this view</p>
+              <p className="mt-1 max-w-sm text-sm text-gray-400">Try a different search or add the first medicine to start your catalog.</p>
+            </div>
+          ) : (
+            filteredProducts.map((product, index) => {
+              const id = getRowKey(product, index);
+              const stock = resolveStock(product);
+              const schedule = product.schedule || product['Schedule'] || 'OTC';
+              const batch = product.batch_no || product['Batch Number'] || '-';
+              const expiry = product.expiry_date || product['Expiry Date'] || '-';
+              const price = resolvePrice(product);
+              const selectedQty = selected[id]?.qty || 0;
+              return (
+                <article key={id} className="rounded-2xl border border-gray-100 bg-white px-3 py-3 transition hover:border-emerald-100 hover:shadow-sm">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex items-start gap-3">
+                      <button
+                        onClick={() => toggleBillItem(product, id)}
+                        className={`mt-1 grid h-8 w-8 place-items-center rounded-xl border transition ${
+                          selected[id]
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                            : 'border-gray-200 bg-white text-gray-400'
+                        }`}
+                        aria-label="Add to bill"
+                      >
+                        {selected[id] ? <Check size={16} /> : <ShoppingCart size={16} />}
+                      </button>
+
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="truncate text-[20px] font-black leading-tight text-[#02100e] tracking-tight">
+                            {resolveDisplayName(product)}
+                          </h4>
+                        </div>
+
+                        <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-sm text-gray-500">
+                          {product.generic_name || product['Generic Name'] ? <span>{product.generic_name || product['Generic Name']}</span> : null}
+                          {product.brand_name || product['Brand Name'] ? <span className="text-gray-300">•</span> : null}
+                          {product.brand_name || product['Brand Name'] ? <span>{product.brand_name || product['Brand Name']}</span> : null}
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-gray-500">
+                          <span>Batch {batch}</span>
+                          <span className="text-gray-300">�</span>
+                          <span>Exp {expiry}</span>
+                          <span className="text-gray-300">�</span>
+                          <span>{schedule}</span>
+                        </div>
+                        {filter === 'expiry' && getExpiryDays(product) !== null && (
+                          <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-rose-100 bg-rose-50 px-3 py-1 text-[11px] font-semibold text-rose-700">
+                            <span>{getExpiryDays(product)} day(s) left</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 lg:gap-3">
+                      <div className={`rounded-xl px-3 py-2.5 ${stock === 0 ? 'bg-red-50' : stock < 20 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+                        <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${stock === 0 ? 'text-red-500' : stock < 20 ? 'text-amber-600' : 'text-emerald-600'}`}>Stock</p>
+                        <p className={`text-base font-semibold ${stock === 0 ? 'text-red-700' : stock < 20 ? 'text-amber-700' : 'text-emerald-700'}`}>{stock}</p>
+                      </div>
+
+                      <div className="rounded-xl border border-gray-200 bg-white px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">Rate</p>
+                        <p className="text-base font-semibold text-gray-900">Rs {price.toFixed(2)}</p>
+                      </div>
+
+                      <button
+                        onClick={() => toggleBillItem(product, id)}
+                        className={`rounded-lg px-2 py-1.5 text-[11px] font-semibold ${
+                          selected[id] ? 'bg-emerald-600 text-white' : 'bg-[#0a2e2a] text-[#bbed3b]'
+                        }`}
+                      >
+                        {selected[id] ? 'Added to bill' : 'Add to bill'}
+                      </button>
+
+                      <button
+                        onClick={() => removeBillItem(id)}
+                        className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-medium text-gray-600"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+
+                  {selectedQty > 0 && (
+                    <div className="mt-3 flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Bill quantity</p>
+                        <p className="text-sm text-emerald-800">Use this when preparing the bill</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setBillQty(id, selectedQty - 1)}
+                          className="grid h-7 w-7 place-items-center rounded-full border border-gray-200 bg-white text-sm font-semibold text-gray-700"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          value={selectedQty}
+                          onChange={(e) => setBillQty(id, Number(e.target.value) || 1)}
+                          className="w-14 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-center text-sm font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-[#bbed3b]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setBillQty(id, selectedQty + 1)}
+                          className="grid h-7 w-7 place-items-center rounded-full border border-gray-200 bg-white text-sm font-semibold text-gray-700"
+                        >
+                          +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCartOpen(true)}
+                          className="grid h-7 w-7 place-items-center rounded-full bg-[#0a2e2a] text-[#bbed3b]"
+                          title="Open cart"
+                        >
+                          <ShoppingCart size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </article>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      {cartOpen && (
+        <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px]">
+          <div className="ml-auto flex h-full w-full max-w-lg flex-col bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400">Cart view</p>
+                <h3 className="text-xl font-semibold text-[#0a2e2a]">Selected medicines</h3>
+              </div>
+              <button onClick={() => setCartOpen(false)} className="rounded-full border border-gray-200 p-2 text-gray-500">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-3">
+                {selectedItems.length === 0 ? (
+                    <div className="rounded-[24px] border border-dashed border-gray-200 bg-gray-50 px-4 py-12 text-center">
+                      <ShoppingCart size={28} className="mx-auto text-gray-300" />
+                      <p className="mt-2 text-sm font-semibold text-gray-500">Cart is empty</p>
+                      <p className="mt-1 text-sm text-gray-400">Tap Add to bill on products to build the bill.</p>
+                    </div>
+                ) : (
+                  selectedItems.map((item) => {
+                    const id = item.key;
+                    const price = resolvePrice(item.product);
+                    return (
+                      <div key={id} className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-2.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-[15px] font-semibold leading-tight text-[#061412]">{resolveDisplayName(item.product)}</p>
+                          </div>
+                          <button onClick={() => removeBillItem(id)} className="rounded-full border border-gray-200 bg-white p-1.5 text-gray-400 hover:text-red-500">
+                            <X size={14} />
+                          </button>
+                        </div>
+
+                        <div className="mt-2 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <QtyButton label="-" onClick={() => setBillQty(id, item.qty - 1)} />
+                            <span className="min-w-6 text-center text-sm font-semibold text-gray-800">{item.qty}</span>
+                            <QtyButton label="+" onClick={() => setBillQty(id, item.qty + 1)} />
+                          </div>
+                          <span className="text-sm font-semibold text-gray-900">Rs {(item.qty * price).toFixed(2)}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 p-6">
+              <div className="rounded-[24px] bg-[#0a2e2a] p-4 text-white">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/60">Bill total</p>
+                <p className="mt-2 text-3xl font-semibold">Rs {billTotal.toFixed(2)}</p>
+              </div>
+              <button className="mt-4 w-full rounded-2xl bg-[#bbed3b] px-4 py-3 text-sm font-semibold text-[#0a2e2a]">
+                Create Bill
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm">
+          <div className="ml-auto flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400">Quick create</p>
+                <h3 className="text-xl font-semibold text-[#0a2e2a]">Add Product</h3>
+              </div>
+              <button onClick={() => setDrawerOpen(false)} className="rounded-full border border-gray-200 p-2 text-gray-500">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={saveProduct} className="flex-1 space-y-4 overflow-y-auto p-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Medicine Name" value={form.medicine_name} onChange={(value) => setForm({ ...form, medicine_name: value })} required />
+                <Field label="Category" value={form.category} onChange={(value) => setForm({ ...form, category: value })} />
+                <Field label="Generic Name" value={form.generic_name} onChange={(value) => setForm({ ...form, generic_name: value })} />
+                <Field label="Brand Name" value={form.brand_name} onChange={(value) => setForm({ ...form, brand_name: value })} />
+                <Field label="Initial Stock" value={String(form.stock)} onChange={(value) => setForm({ ...form, stock: Number(value) || 0 })} type="number" />
+                <Field label="Barcode" value={form.barcode} onChange={(value) => setForm({ ...form, barcode: value })} />
+                <Field label="Batch No" value={form.batch_no} onChange={(value) => setForm({ ...form, batch_no: value })} />
+                <Field label="Expiry Date" value={form.expiry_date} onChange={(value) => setForm({ ...form, expiry_date: value })} type="date" />
+                <Field label="MRP" value={String(form.mrp)} onChange={(value) => setForm({ ...form, mrp: Number(value) || 0 })} type="number" />
+                <Field label="Selling Price" value={String(form.selling_price)} onChange={(value) => setForm({ ...form, selling_price: Number(value) || 0 })} type="number" />
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Schedule</label>
+                  <select
+                    value={form.schedule}
+                    onChange={(e) => setForm({ ...form, schedule: e.target.value, prescription_required: e.target.value !== 'OTC' })}
+                    className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-[#bbed3b]"
+                  >
+                    {SCHEDULES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <label className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={form.prescription_required}
+                    onChange={(e) => setForm({ ...form, prescription_required: e.target.checked })}
+                  />
+                  Prescription required
+                </label>
+              </div>
+
+              <div className="rounded-[24px] border border-gray-100 bg-gray-50 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-gray-800">Packaging</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">Base unit only in stock</p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Field
+                    label="Unit to base"
+                    value={String(form.packaging.levels.find((item) => item.level === 'unit')?.to_base_units || 1)}
+                    onChange={(value) => updateLevel(form, setForm, 'unit', value)}
+                    type="number"
+                  />
+                  <Field
+                    label="Strip to base"
+                    value={String(form.packaging.levels.find((item) => item.level === 'strip')?.to_base_units || 10)}
+                    onChange={(value) => updateLevel(form, setForm, 'strip', value)}
+                    type="number"
+                  />
+                  <Field
+                    label="Box to base"
+                    value={String(form.packaging.levels.find((item) => item.level === 'box')?.to_base_units || 100)}
+                    onChange={(value) => updateLevel(form, setForm, 'box', value)}
+                    type="number"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setDrawerOpen(false)} className="flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700">
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 rounded-2xl bg-[#0a2e2a] px-4 py-3 text-sm font-semibold text-[#bbed3b] disabled:opacity-70"
+                >
+                  {saving ? <Loader2 className="mx-auto animate-spin" size={18} /> : 'Save Product'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const updateLevel = (
+  form: ProductForm,
+  setForm: Dispatch<SetStateAction<ProductForm>>,
+  level: 'unit' | 'strip' | 'box',
+  value: string,
+) => {
+  const next = Number(value) || 1;
+  setForm({
+    ...form,
+    packaging: {
+      ...form.packaging,
+      levels: form.packaging.levels.map((item) => (item.level === level ? { ...item, to_base_units: next } : item)),
+    },
+  });
+};
+
+const QtyButton = ({ label, onClick }: { label: string; onClick: () => void }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="grid h-8 w-8 place-items-center rounded-full border border-gray-200 bg-white text-base font-semibold text-gray-700"
+  >
+    {label}
+  </button>
+);
+
+const Field = ({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  required?: boolean;
+}) => (
+  <label className="block">
+    <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">{label}</span>
+    <input
+      required={required}
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-[#bbed3b]"
+    />
+  </label>
+);
+
 export default ProductTable;
+
+
+
+
