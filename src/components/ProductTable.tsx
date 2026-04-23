@@ -7,9 +7,10 @@ import {
   Plus,
   Search,
   ShoppingCart,
+  Trash2,
   X,
 } from 'lucide-react';
-import { addProduct, fetchProducts } from '../services/api';
+import { addProduct, applyStockActions, fetchProducts, fetchProductBatches } from '../services/api';
 
 type PackBreakdown = { box: number; strip: number; unit: number };
 
@@ -17,8 +18,11 @@ type ProductRow = {
   id?: string;
   _id?: string;
   medicine_name?: string;
+  strength?: string;
   generic_name?: string;
   brand_name?: string;
+  manufacturer?: string;
+  supplier_name?: string;
   category?: string;
   packaging?: { levels?: { level: string; to_base_units: number; label?: string }[] };
   stock_summary?: { available_base_units?: number; breakdown?: PackBreakdown };
@@ -26,17 +30,24 @@ type ProductRow = {
   batch_no?: string;
   expiry_date?: string;
   selling_price?: number;
+  unit_price?: number;
   mrp?: number;
+  purchase_price?: number;
   schedule?: string;
   prescription_required?: boolean;
   barcodes?: { code: string; level: string; is_primary?: boolean }[];
   "Medicine Name"?: string;
+  "Strength"?: string;
   "Generic Name"?: string;
   "Brand Name"?: string;
+  "Manufacturer"?: string;
+  "Supplier Name"?: string;
   "Current Stock"?: number;
   "Batch Number"?: string;
   "Expiry Date"?: string;
   "MRP"?: number;
+  "Unit Price"?: number;
+  "Purchase Price"?: number;
   "Selling Price"?: number;
   "Schedule"?: string;
   "Prescription Required"?: boolean;
@@ -104,20 +115,48 @@ const ProductTable = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState<ProductForm>(emptyForm());
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+  const [batchesByProduct, setBatchesByProduct] = useState<Record<string, any[]>>({});
+  const [loadingBatchesId, setLoadingBatchesId] = useState<string | null>(null);
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false);
+  const [batchDialogProductId, setBatchDialogProductId] = useState<string | null>(null);
+  const [batchDialogProduct, setBatchDialogProduct] = useState<ProductRow | null>(null);
+  const [batchForm, setBatchForm] = useState({
+    batch_no: '',
+    expiry_date: '',
+    quantity: 0,
+    supplier_name: '',
+    purchase_rate_per_base: '',
+    mrp_per_base: '',
+  });
+  const [batchSaving, setBatchSaving] = useState(false);
 
   const resolveName = (p: ProductRow) => p['Medicine Name'] || p.medicine_name || '';
-  const resolveDisplayName = (p: ProductRow) =>
-    resolveName(p) || p.brand_name || p['Brand Name'] || p.generic_name || p['Generic Name'] || 'Medicine';
-  const resolveId = (p: ProductRow) => String(p.id || p._id || p['Product ID'] || p.barcodes?.[0]?.code || '');
+  const resolveStrength = (p: ProductRow) => p.strength || p['Strength'] || '';
+  const resolveCompany = (p: ProductRow) => p.manufacturer || p['Manufacturer'] || p.brand_name || p['Brand Name'] || p.supplier_name || p['Supplier Name'] || '';
+  const isWeakName = (value: string) => !value || /^(medicine|product|item|unknown|na|n\/a)$/i.test(value.trim());
+  const resolveMedicineTitle = (p: ProductRow) => {
+    const base = resolveName(p).trim();
+    const strength = resolveStrength(p).trim();
+    const generic = (p.generic_name || p['Generic Name'] || '').trim();
+    const company = resolveCompany(p).trim();
+    const candidate = !isWeakName(base) ? base : generic || '';
+    if (candidate && strength && !candidate.toLowerCase().includes(strength.toLowerCase())) return `${candidate} ${strength}`;
+    if (candidate) return candidate;
+    if (strength) return strength;
+    return company || 'Medicine';
+  };
+  const resolveProductKey = (p: ProductRow) => String(p.id || p._id || p['Product ID'] || p.barcodes?.[0]?.code || '');
   const getRowKey = (p: ProductRow, index: number) => {
-    const stable = resolveId(p);
+    const stable = resolveProductKey(p);
     if (stable) return stable;
     const batch = p.batch_no || p['Batch Number'] || 'nobatch';
     const expiry = p.expiry_date || p['Expiry Date'] || 'noexpiry';
-    return `${resolveName(p)}|${batch}|${expiry}|${index}`;
+    return `${resolveMedicineTitle(p)}|${batch}|${expiry}|${index}`;
   };
   const resolveStock = (p: ProductRow) => Number(p.stock_summary?.available_base_units ?? p['Current Stock'] ?? 0);
-  const resolvePrice = (p: ProductRow) => Number(p.selling_price ?? p['Selling Price'] ?? p.mrp ?? p['MRP'] ?? 0);
+  const resolvePrice = (p: ProductRow) => Number(p.selling_price ?? p['Selling Price'] ?? p.unit_price ?? p['Unit Price'] ?? p.mrp ?? p['MRP'] ?? p.purchase_price ?? p['Purchase Price'] ?? 0);
+  const resolvePurchasePrice = (p: ProductRow) => Number(p.purchase_price ?? p['Purchase Price'] ?? 0);
   const resolveExpiry = (p: ProductRow) => p.expiry_date || p['Expiry Date'] || '';
   const getExpiryDays = (p: ProductRow) => {
     const expiry = resolveExpiry(p);
@@ -125,6 +164,32 @@ const ProductTable = () => {
     const diff = Math.ceil((new Date(expiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     return Number.isNaN(diff) ? null : diff;
   };
+  const resolveUnitLabel = (p: ProductRow) => p.packaging?.levels?.find((item) => item.level === 'unit')?.label || 'Unit';
+  const pluralizeLabel = (label: string, count: number) => {
+    const next = label || 'Unit';
+    if (count === 1) return next;
+    return next.toLowerCase().endsWith('s') ? next : `${next}s`;
+  };
+  const formatPackAmount = (baseUnits: number, p: ProductRow) => {
+    const levels = [...(p.packaging?.levels || [])].sort((a, b) => b.to_base_units - a.to_base_units);
+    if (!levels.length) return `${baseUnits.toLocaleString()} ${pluralizeLabel('Unit', baseUnits)}`;
+    let remaining = Math.max(baseUnits, 0);
+    const parts: string[] = [];
+    for (const level of levels) {
+      if (level.level === 'unit') continue;
+      const count = Math.floor(remaining / level.to_base_units);
+      if (count > 0) {
+        parts.push(`${count.toLocaleString()} ${pluralizeLabel(level.label || level.level, count)}`);
+        remaining -= count * level.to_base_units;
+      }
+    }
+    if (remaining > 0 || parts.length === 0) {
+      const unitLabel = resolveUnitLabel(p);
+      parts.push(`${remaining.toLocaleString()} ${pluralizeLabel(unitLabel, remaining)}`);
+    }
+    return parts.join(' + ');
+  };
+  const formatStockLabel = (p: ProductRow) => formatPackAmount(resolveStock(p), p);
 
   const loadProducts = async () => {
     setLoading(true);
@@ -166,6 +231,46 @@ const ProductTable = () => {
   const selectedItems = Object.values(selected);
   const selectedCount = selectedItems.length;
   const billTotal = selectedItems.reduce((sum, item) => sum + item.qty * resolvePrice(item.product), 0);
+
+  const loadBatchesForProduct = async (productId: string) => {
+    if (batchesByProduct[productId]) return batchesByProduct[productId];
+    setLoadingBatchesId(productId);
+    try {
+      const response = await fetchProductBatches(productId);
+      const batches = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+      setBatchesByProduct((prev) => ({ ...prev, [productId]: batches }));
+      return batches;
+    } catch (error) {
+      console.error(error);
+      setBatchesByProduct((prev) => ({ ...prev, [productId]: [] }));
+      return [];
+    } finally {
+      setLoadingBatchesId((current) => (current === productId ? null : current));
+    }
+  };
+
+  const toggleExpandedProduct = async (productId: string) => {
+    setExpandedProductId((current) => (current === productId ? null : productId));
+    await loadBatchesForProduct(productId);
+  };
+  const openBatchDialog = (product: ProductRow, productId: string) => {
+    setBatchDialogProduct(product);
+    setBatchDialogProductId(productId);
+    setBatchForm({
+      batch_no: '',
+      expiry_date: '',
+      quantity: 0,
+      supplier_name: resolveCompany(product),
+      purchase_rate_per_base: '',
+      mrp_per_base: String(resolvePrice(product) || ''),
+    });
+    setBatchDialogOpen(true);
+  };
+  const closeBatchDialog = () => {
+    setBatchDialogOpen(false);
+    setBatchDialogProductId(null);
+    setBatchDialogProduct(null);
+  };
   const toggleBillItem = (product: ProductRow, key: string) => {
     setSelected((prev) => {
       const next = { ...prev };
@@ -178,7 +283,7 @@ const ProductTable = () => {
   const setBillQty = (productId: string, qty: number) => {
     setSelected((prev) => {
       if (!prev[productId]) return prev;
-      return { ...prev, [productId]: { ...prev[productId], qty: Math.max(1, qty) } };
+      return { ...prev, [productId]: { ...prev[productId], qty: Math.max(0, qty) } };
     });
   };
 
@@ -221,6 +326,44 @@ const ProductTable = () => {
       setMessage('Could not save product');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveBatch = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!batchDialogProduct || !batchDialogProductId) return;
+    setBatchSaving(true);
+    setMessage(null);
+    try {
+      const payload = {
+        action: 'purchase_in',
+        reason_code: 'batch_add',
+        reference_type: 'batch_add',
+        reference_id: batchDialogProductId,
+        lines: [
+          {
+            product_id: batchDialogProductId,
+            batch_no: batchForm.batch_no.trim() || undefined,
+            expiry_date: batchForm.expiry_date || undefined,
+            qty: { unit: Number(batchForm.quantity) || 0, strip: 0, box: 0 },
+            supplier_name: batchForm.supplier_name.trim() || undefined,
+            purchase_rate_per_base: batchForm.purchase_rate_per_base ? Number(batchForm.purchase_rate_per_base) : undefined,
+            mrp_per_base: batchForm.mrp_per_base ? Number(batchForm.mrp_per_base) : undefined,
+          },
+        ],
+      };
+      await applyStockActions(payload, `batch-add:${batchDialogProductId}:${batchForm.batch_no || Date.now()}`);
+      setMessage('Batch added successfully');
+      closeBatchDialog();
+      await loadProducts();
+      if (expandedProductId) {
+        await loadBatchesForProduct(expandedProductId);
+      }
+    } catch (error) {
+      console.error(error);
+      setMessage('Could not add batch');
+    } finally {
+      setBatchSaving(false);
     }
   };
 
@@ -320,11 +463,16 @@ const ProductTable = () => {
             filteredProducts.map((product, index) => {
               const id = getRowKey(product, index);
               const stock = resolveStock(product);
-              const schedule = product.schedule || product['Schedule'] || 'OTC';
-              const batch = product.batch_no || product['Batch Number'] || '-';
+              const batch = product.batch_no || product['Batch Number'] || '';
               const expiry = product.expiry_date || product['Expiry Date'] || '-';
               const price = resolvePrice(product);
+              const category = product.category || 'OTC';
               const selectedQty = selected[id]?.qty || 0;
+              const productBatches = batchesByProduct[id] || [];
+              const earliestExpiry = productBatches.find((batchItem: any) => batchItem.expiry_date || batchItem['Expiry Date'])?.expiry_date
+                || productBatches.find((batchItem: any) => batchItem.expiry_date || batchItem['Expiry Date'])?.['Expiry Date']
+                || expiry;
+              const batchLabel = batch ? `Batch ${batch}` : '+ Add Batch';
               return (
                 <article key={id} className="rounded-2xl border border-gray-100 bg-white px-3 py-3 transition hover:border-emerald-100 hover:shadow-sm">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -344,96 +492,188 @@ const ProductTable = () => {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="truncate text-[20px] font-black leading-tight text-[#02100e] tracking-tight">
-                            {resolveDisplayName(product)}
+                            {resolveMedicineTitle(product)}
                           </h4>
+                          {resolveStrength(product) ? (
+                            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                              {resolveStrength(product)}
+                            </span>
+                          ) : null}
                         </div>
 
-                        <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-sm text-gray-500">
-                          {product.generic_name || product['Generic Name'] ? <span>{product.generic_name || product['Generic Name']}</span> : null}
-                          {product.brand_name || product['Brand Name'] ? <span className="text-gray-300">â€¢</span> : null}
-                          {product.brand_name || product['Brand Name'] ? <span>{product.brand_name || product['Brand Name']}</span> : null}
-                        </div>
+                        {resolveCompany(product) ? (
+                          <div className="mt-1 text-sm font-medium text-gray-500">{resolveCompany(product)}</div>
+                        ) : null}
 
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-gray-500">
-                          <span>Batch {batch}</span>
-                          <span className="text-gray-300">•</span>
-                          <span>Exp {expiry}</span>
-                          <span className="text-gray-300">•</span>
-                          <span>{schedule}</span>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-gray-600">
+                          <button
+                            type="button"
+                            onClick={() => openBatchDialog(product, id)}
+                            className={`rounded-full px-2.5 py-1 font-semibold transition ${
+                              batch
+                                ? 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                                : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+                            }`}
+                          >
+                            {batchLabel}
+                          </button>
+                          <span className="rounded-full bg-gray-50 px-2.5 py-1 font-semibold text-gray-700">Earliest Exp: {earliestExpiry}</span>
+                          <span className="rounded-full bg-gray-50 px-2.5 py-1 font-semibold text-gray-700">Stock: {formatStockLabel(product)}</span>
+                          <span className="rounded-full bg-gray-50 px-2.5 py-1 font-semibold text-gray-700">Form: {category}</span>
+                          {resolvePurchasePrice(product) > 0 ? (
+                            <span className="rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700">Buy: Rs {resolvePurchasePrice(product).toFixed(2)}</span>
+                          ) : null}
                         </div>
                         {filter === 'expiry' && getExpiryDays(product) !== null && (
                           <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-rose-100 bg-rose-50 px-3 py-1 text-[11px] font-semibold text-rose-700">
-                            <span>{getExpiryDays(product)} day(s) left</span>
+                        <span>{getExpiryDays(product)} day(s) left</span>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 lg:gap-3">
-                      <div className={`rounded-xl px-3 py-2.5 ${stock === 0 ? 'bg-red-50' : stock < 20 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
-                        <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${stock === 0 ? 'text-red-500' : stock < 20 ? 'text-amber-600' : 'text-emerald-600'}`}>Stock</p>
-                        <p className={`text-base font-semibold ${stock === 0 ? 'text-red-700' : stock < 20 ? 'text-amber-700' : 'text-emerald-700'}`}>{stock}</p>
+                    <div className="flex flex-wrap items-center gap-2 lg:gap-2.5">
+                      <div className={`inline-flex items-center gap-2 rounded-full px-3 py-2 ${stock === 0 ? 'bg-red-50' : stock < 20 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+                        <Package size={13} className={stock === 0 ? 'text-red-500' : stock < 20 ? 'text-amber-600' : 'text-emerald-600'} />
+                        <div className="leading-tight">
+                          <p className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${stock === 0 ? 'text-red-500' : stock < 20 ? 'text-amber-600' : 'text-emerald-600'}`}>Stock</p>
+                        <p className={`text-sm font-semibold ${stock === 0 ? 'text-red-700' : stock < 20 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                            {formatStockLabel(product)}
+                          </p>
+                        </div>
                       </div>
 
-                      <div className="rounded-xl border border-gray-200 bg-white px-3 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">Rate</p>
-                        <p className="text-base font-semibold text-gray-900">Rs {price.toFixed(2)}</p>
+                      <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2">
+                        <div className="leading-tight">
+                          <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400">Rate</p>
+                          <p className="text-sm font-semibold text-gray-900">Rs {price.toFixed(2)}</p>
+                        </div>
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleExpandedProduct(id)}
+                        className="grid h-9 w-9 place-items-center rounded-full border border-gray-200 bg-white text-gray-700"
+                        title={expandedProductId === id ? 'Hide batches' : 'Show batches'}
+                      >
+                        <Package size={14} />
+                      </button>
 
                       <button
                         onClick={() => toggleBillItem(product, id)}
-                        className={`rounded-lg px-2 py-1.5 text-[11px] font-semibold ${
+                        className={`grid h-9 w-9 place-items-center rounded-full ${
                           selected[id] ? 'bg-emerald-600 text-white' : 'bg-[#0a2e2a] text-[#bbed3b]'
                         }`}
+                        title={selected[id] ? 'Added to bill' : 'Add to bill'}
                       >
-                        {selected[id] ? 'Added to bill' : 'Add to bill'}
+                        <ShoppingCart size={14} />
                       </button>
 
-                      <button
-                        onClick={() => removeBillItem(id)}
-                        className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-medium text-gray-600"
-                      >
-                        Remove
-                      </button>
+                      {selected[id] ? (
+                        <button
+                          onClick={() => removeBillItem(id)}
+                          className="grid h-9 w-9 place-items-center rounded-full border border-gray-200 bg-white text-gray-600"
+                          title="Clear from bill"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      ) : null}
                     </div>
                   </div>
 
-                  {selectedQty > 0 && (
-                    <div className="mt-3 flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Bill quantity</p>
-                        <p className="text-sm text-emerald-800">Use this when preparing the bill</p>
+                  {expandedProductId === id && (
+                    <div className="mt-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">Batch details</p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openBatchDialog(product, id)}
+                            className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
+                          >
+                            <Plus size={12} />
+                            Add New Batch
+                          </button>
+                          {loadingBatchesId === id ? <Loader2 className="animate-spin text-gray-400" size={14} /> : null}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setBillQty(id, selectedQty - 1)}
-                          className="grid h-7 w-7 place-items-center rounded-full border border-gray-200 bg-white text-sm font-semibold text-gray-700"
-                        >
-                          -
-                        </button>
-                        <input
-                          type="number"
-                          min="1"
-                          value={selectedQty}
-                          onChange={(e) => setBillQty(id, Number(e.target.value) || 1)}
-                          className="w-14 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-center text-sm font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-[#bbed3b]"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setBillQty(id, selectedQty + 1)}
-                          className="grid h-7 w-7 place-items-center rounded-full border border-gray-200 bg-white text-sm font-semibold text-gray-700"
-                        >
-                          +
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCartOpen(true)}
-                          className="grid h-7 w-7 place-items-center rounded-full bg-[#0a2e2a] text-[#bbed3b]"
-                          title="Open cart"
-                        >
-                          <ShoppingCart size={14} />
-                        </button>
+                      <div className="space-y-2">
+                        {(batchesByProduct[id] || []).length > 0 ? (
+                          batchesByProduct[id].map((batchItem: any, batchIndex: number) => {
+                            const batchNo = batchItem.batch_no || batchItem['Batch Number'] || 'Missing';
+                            const batchExpiry = batchItem.expiry_date || batchItem['Expiry Date'] || '-';
+                            const batchStock = Number(batchItem.available_base_units ?? batchItem['Current Stock'] ?? 0);
+                            const batchPrice = Number(batchItem.purchase_rate_per_base ?? batchItem.unit_price ?? batchItem['Unit Price'] ?? batchItem.mrp_per_base ?? batchItem['MRP'] ?? 0);
+                            const sellingPrice = Number(batchItem.selling_price ?? batchItem['Selling Price'] ?? batchItem.mrp ?? batchItem['MRP'] ?? 0);
+                            const supplier = batchItem.supplier_name || batchItem['Supplier Name'] || '';
+                            return (
+                              <div key={`${batchNo}-${batchIndex}`} className="rounded-xl border border-gray-100 bg-white px-3 py-2">
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600">
+                                  <span className="font-semibold text-gray-900">Batch {batchNo}</span>
+                                  <span>Exp {batchExpiry}</span>
+                                  <span>{formatPackAmount(batchStock, product)}</span>
+                                  {supplier ? <span>Supplier {supplier}</span> : null}
+                                  {batchPrice ? <span>Buy Rs {batchPrice.toFixed(2)}</span> : null}
+                                  {sellingPrice ? <span>Sell Rs {sellingPrice.toFixed(2)}</span> : null}
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="rounded-xl border border-gray-100 bg-white px-3 py-2 text-sm text-gray-500">
+                            {loadingBatchesId === id ? 'Loading batches...' : 'No batch details found'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedQty > 0 && (
+                    <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Bill quantity</p>
+                          <p className="text-sm text-emerald-800">Use this when preparing the bill</p>
+                          <div className="mt-1 flex items-center gap-3">
+                            <span className="text-xs text-emerald-700">
+                              Line Total: Rs {(selectedQty * price).toFixed(2)}
+                            </span>
+                            <span className="text-xs text-emerald-700">
+                              Bill Total: Rs {billTotal.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setBillQty(id, selectedQty - 1)}
+                            className="grid h-7 w-7 place-items-center rounded-full border border-gray-200 bg-white text-sm font-semibold text-gray-700"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            min="0"
+                            value={selectedQty}
+                            onChange={(e) => setBillQty(id, e.target.value === '' ? 0 : Number(e.target.value))}
+                            className="w-14 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-center text-sm font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-[#bbed3b]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setBillQty(id, selectedQty + 1)}
+                            className="grid h-7 w-7 place-items-center rounded-full border border-gray-200 bg-white text-sm font-semibold text-gray-700"
+                          >
+                            +
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCartOpen(true)}
+                            className="grid h-7 w-7 place-items-center rounded-full bg-[#0a2e2a] text-[#bbed3b]"
+                            title="Open cart"
+                          >
+                            <ShoppingCart size={14} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -473,20 +713,30 @@ const ProductTable = () => {
                       <div key={id} className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-2.5">
                         <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate text-[15px] font-semibold leading-tight text-[#061412]">{resolveDisplayName(item.product)}</p>
+                            <p className="truncate text-[15px] font-semibold leading-tight text-[#061412]">{resolveMedicineTitle(item.product)}</p>
+                            <p className="mt-0.5 text-xs text-gray-500">{resolveCompany(item.product) || 'Selected medicine'} â€¢ Rs {price.toFixed(2)} each</p>
                           </div>
                           <button onClick={() => removeBillItem(id)} className="rounded-full border border-gray-200 bg-white p-1.5 text-gray-400 hover:text-red-500">
                             <X size={14} />
                           </button>
                         </div>
 
-                        <div className="mt-2 flex items-center justify-between">
+                        <div className="mt-2 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
                             <QtyButton label="-" onClick={() => setBillQty(id, item.qty - 1)} />
-                            <span className="min-w-6 text-center text-sm font-semibold text-gray-800">{item.qty}</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={item.qty}
+                              onChange={(e) => setBillQty(id, e.target.value === '' ? 0 : Number(e.target.value))}
+                              className="w-16 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-center text-sm font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-[#bbed3b]"
+                            />
                             <QtyButton label="+" onClick={() => setBillQty(id, item.qty + 1)} />
                           </div>
-                          <span className="text-sm font-semibold text-gray-900">Rs {(item.qty * price).toFixed(2)}</span>
+                          <div className="text-right">
+                            <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400">Line total</p>
+                            <span className="text-sm font-semibold text-gray-900">Rs {(item.qty * price).toFixed(2)}</span>
+                          </div>
                         </div>
                       </div>
                     );
@@ -504,6 +754,51 @@ const ProductTable = () => {
                 Create Bill
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {batchDialogOpen && batchDialogProduct && (
+        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm">
+          <div className="ml-auto flex h-full w-full max-w-lg flex-col bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400">Batch entry</p>
+                <h3 className="text-xl font-semibold text-[#0a2e2a]">Add Batch</h3>
+                <p className="mt-1 text-sm text-gray-500">{resolveMedicineTitle(batchDialogProduct)}</p>
+              </div>
+              <button onClick={closeBatchDialog} className="rounded-full border border-gray-200 p-2 text-gray-500">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={saveBatch} className="flex-1 space-y-4 overflow-y-auto p-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Batch Number" value={batchForm.batch_no} onChange={(value) => setBatchForm({ ...batchForm, batch_no: value })} required />
+                <Field label="Expiry Date" value={batchForm.expiry_date} onChange={(value) => setBatchForm({ ...batchForm, expiry_date: value })} type="date" required />
+                <Field label="Quantity" value={String(batchForm.quantity)} onChange={(value) => setBatchForm({ ...batchForm, quantity: Number(value) || 0 })} type="number" required />
+                <Field label="Supplier Name" value={batchForm.supplier_name} onChange={(value) => setBatchForm({ ...batchForm, supplier_name: value })} />
+                <Field label="Purchase Price" value={batchForm.purchase_rate_per_base} onChange={(value) => setBatchForm({ ...batchForm, purchase_rate_per_base: value })} type="number" />
+                <Field label="Selling / MRP" value={batchForm.mrp_per_base} onChange={(value) => setBatchForm({ ...batchForm, mrp_per_base: value })} type="number" />
+              </div>
+
+              <div className="rounded-[24px] border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
+                Batch stock is stored in base units, but the display will stay readable in the product row.
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={closeBatchDialog} className="flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700">
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={batchSaving}
+                  className="flex-1 rounded-2xl bg-[#0a2e2a] px-4 py-3 text-sm font-semibold text-[#bbed3b] disabled:opacity-70"
+                >
+                  {batchSaving ? <Loader2 className="mx-auto animate-spin" size={18} /> : 'Save Batch'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
