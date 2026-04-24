@@ -294,7 +294,7 @@ const ProductTable = () => {
       raw: batch,
     };
   };
-  const getBatchList = (product: ProductRow, productId: string) => {
+  const getBatchList = useCallback((product: ProductRow, productId: string) => {
     const loaded = batchesByProduct[productId] || [];
     const productBatch = product.batch_no || product['Batch Number'] ? [product] : [];
     const next = [...loaded, ...productBatch];
@@ -303,7 +303,7 @@ const ProductTable = () => {
       if (expiryDiff !== 0) return expiryDiff;
       return a.batchNo.localeCompare(b.batchNo);
     });
-  };
+  }, [batchesByProduct]);
   const getRowKey = (p: ProductRow, index: number) => {
     const stable = resolveProductKey(p);
     if (stable) return stable;
@@ -318,7 +318,20 @@ const ProductTable = () => {
     }
     return Number(p.stock_summary?.available_base_units ?? p['Current Stock'] ?? 0);
   };
-  const resolvePrice = (p: ProductRow) => Number(p.selling_price ?? p['Selling Price'] ?? p.unit_price ?? p['Unit Price'] ?? p.mrp ?? p['MRP'] ?? p.purchase_price ?? p['Purchase Price'] ?? 0);
+  const resolvePrice = (p: ProductRow, productId = '') => {
+    if (productId) {
+      const batches = getBatchList(p, productId).filter(b => b.availableBaseUnits > 0);
+      if (batches.length > 0) return batches[0].sellingPrice;
+    }
+    return Number(p.selling_price ?? p['Selling Price'] ?? p.unit_price ?? p['Unit Price'] ?? p.mrp ?? p['MRP'] ?? p.purchase_price ?? p['Purchase Price'] ?? 0);
+  };
+  const resolvePurchasePrice = (p: ProductRow, productId = '') => {
+    if (productId) {
+      const batches = getBatchList(p, productId).filter(b => b.availableBaseUnits > 0);
+      if (batches.length > 0) return batches[0].purchasePrice;
+    }
+    return Number(p.purchase_price ?? p['Purchase Price'] ?? 0);
+  };
   const resolveExpiry = (p: ProductRow, productId = '') => {
     const batches = productId ? getBatchList(p, productId) : [];
     return batches[0]?.expiryDate || p.expiry_date || p['Expiry Date'] || '';
@@ -394,7 +407,7 @@ const ProductTable = () => {
   const loadProducts = async () => {
     setLoading(true);
     try {
-      const res = await fetchProducts(1, 1000, search);
+      const res = await fetchProducts(1, 1000, ''); // Fetch all initially for local filtering
       setProducts((res.data || []) as ProductRow[]);
     } catch (error) {
       console.error(error);
@@ -405,29 +418,67 @@ const ProductTable = () => {
   };
 
   useEffect(() => {
-    const timer = setTimeout(loadProducts, 250);
-    return () => clearTimeout(timer);
-  }, [search]);
+    loadProducts();
+  }, []);
+
+  const processedProducts = useMemo(() => {
+    return products.map((p, index) => {
+      const id = getRowKey(p, index);
+      const batches = getBatchList(p, id);
+      const stock = batches.length > 0 
+        ? batches.reduce((sum, b) => sum + Number(b.availableBaseUnits || 0), 0)
+        : Number(p.stock_summary?.available_base_units ?? p['Current Stock'] ?? 0);
+      
+      const availableBatches = batches.filter(b => b.availableBaseUnits > 0);
+      const displayPrice = availableBatches.length > 0 
+        ? availableBatches[0].sellingPrice 
+        : Number(p.selling_price ?? p['Selling Price'] ?? p.unit_price ?? p['Unit Price'] ?? p.mrp ?? p['MRP'] ?? 0);
+      
+      const purchasePrice = availableBatches.length > 0 
+        ? availableBatches[0].purchasePrice 
+        : Number(p.purchase_price ?? p['Purchase Price'] ?? 0);
+
+      const earliestExpiry = availableBatches[0]?.expiryDate || p.expiry_date || p['Expiry Date'] || '-';
+      const expiryDays = earliestExpiry !== '-' ? Math.ceil((new Date(earliestExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+
+      return {
+        ...p,
+        computedId: id,
+        computedStock: stock,
+        computedPrice: displayPrice,
+        computedPurchasePrice: purchasePrice,
+        computedEarliestExpiry: earliestExpiry,
+        computedExpiryDays: expiryDays,
+        computedBatches: batches,
+        computedAvailableBatches: availableBatches
+      };
+    });
+  }, [products, batchesByProduct, getBatchList]);
 
   const filteredProducts = useMemo(() => {
-    const next = products.filter((p, index) => {
-      const id = getRowKey(p, index);
-      const stock = resolveStock(p, id);
-      if (filter === 'low') return stock > 0 && stock < 20;
+    let next = processedProducts.filter((p) => {
+      // Local search filtering
+      if (search) {
+        const s = search.toLowerCase();
+        const title = resolveMedicineTitle(p).toLowerCase();
+        const generic = (p.generic_name || p['Generic Name'] || '').toLowerCase();
+        const barcode = (p.barcodes?.[0]?.code || '').toLowerCase();
+        const brand = (p.brand_name || p['Brand Name'] || '').toLowerCase();
+        if (!title.includes(s) && !generic.includes(s) && !barcode.includes(s) && !brand.includes(s)) return false;
+      }
+
+      if (filter === 'low') return p.computedStock > 0 && p.computedStock < 20;
       if (filter === 'expiry') {
-        const exp = resolveExpiry(p, id);
-        if (!exp) return false;
-        const days = getExpiryDays(p, id);
-        if (days === null) return false;
-        return days >= 0 && days <= 90;
+        return p.computedExpiryDays !== null && p.computedExpiryDays >= 0 && p.computedExpiryDays <= 90;
       }
       return true;
     });
+
     if (filter === 'expiry') {
-      return next.sort((a, b) => (getExpiryDays(a, resolveProductKey(a)) ?? 9999) - (getExpiryDays(b, resolveProductKey(b)) ?? 9999));
+      next = [...next].sort((a, b) => (a.computedExpiryDays ?? 9999) - (b.computedExpiryDays ?? 9999));
     }
     return next;
-  }, [products, filter, batchesByProduct]);
+  }, [processedProducts, filter]);
 
   const selectedItems = Object.values(selected);
   const selectedCount = selectedItems.length;
@@ -489,12 +540,12 @@ const ProductTable = () => {
       [key]: {
         key,
         product,
-        qty: 0,
+        qty: 1,
         batch: null,
         availableBatches: [],
       },
     }));
-    setQtyDrafts((prev) => ({ ...prev, [key]: '' }));
+    setQtyDrafts((prev) => ({ ...prev, [key]: '1' }));
     qtyAutoSelectUsed.current[key] = false;
   };
 
@@ -765,20 +816,20 @@ const ProductTable = () => {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => openProductDrawer()}
-              className="inline-flex items-center gap-2 rounded-2xl bg-[#0a2e2a] px-3.5 py-2.5 text-sm font-semibold text-[#bbed3b]"
+              className="inline-flex items-center gap-2 rounded-2xl bg-[#0a2e2a] px-3.5 py-2.5 text-sm font-semibold text-[#bbed3b] shadow-sm transition-all hover:bg-[#0f423d] active:scale-95 active:translate-y-0.5"
             >
               <Plus size={16} /> Add Product
             </button>
             <button
               onClick={openOcrDialog}
-              className="inline-flex items-center gap-2 rounded-2xl border border-cyan-200 bg-cyan-50 px-3.5 py-2.5 text-sm font-semibold text-cyan-700"
+              className="inline-flex items-center gap-2 rounded-2xl border border-cyan-200 bg-cyan-50 px-3.5 py-2.5 text-sm font-semibold text-cyan-700 transition-all hover:bg-cyan-100 active:scale-95 active:translate-y-0.5"
             >
               <Camera size={16} /> Scan Product
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={importPreviewing}
-              className="inline-flex items-center gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-3.5 py-2.5 text-sm font-semibold text-violet-700"
+              className="inline-flex items-center gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-3.5 py-2.5 text-sm font-semibold text-violet-700 transition-all hover:bg-violet-100 active:scale-95 active:translate-y-0.5"
             >
               {importPreviewing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
               Import CSV
@@ -786,13 +837,13 @@ const ProductTable = () => {
             <input ref={fileInputRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleImportFile} />
             <button
               onClick={() => setCartOpen(true)}
-              className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm font-semibold text-emerald-800"
+              className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm font-semibold text-emerald-800 transition-all hover:bg-emerald-100 active:scale-95 active:translate-y-0.5"
             >
               <ShoppingCart size={16} /> Cart {selectedCount > 0 ? `(${selectedCount})` : ''}
             </button>
             <button
               onClick={() => { setSelected({}); setQtyDrafts({}); }}
-              className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium text-gray-700"
+              className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-95 active:translate-y-0.5"
             >
               Clear Selection
             </button>
@@ -820,14 +871,22 @@ const ProductTable = () => {
         </div>
 
         <div className="mt-4">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600" size={17} />
+          <div className="relative group">
+            <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600 transition-colors group-focus-within:text-emerald-400" size={17} />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search medicines, salt, brand, or barcode"
-              className="w-full rounded-[20px] border border-gray-200 bg-white py-3 pl-11 pr-4 text-[15px] text-gray-900 shadow-[0_1px_2px_rgba(16,24,40,0.04)] outline-none transition placeholder:text-gray-400 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+              className="w-full rounded-[20px] border border-gray-200 bg-white py-3.5 pl-11 pr-12 text-[15px] text-gray-900 shadow-[0_2px_4px_rgba(0,0,0,0.02)] outline-none transition-all placeholder:text-gray-400 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
             />
+            {search && (
+              <button 
+                onClick={() => setSearch('')}
+                className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 active:scale-90"
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -866,35 +925,31 @@ const ProductTable = () => {
             </div>
           ) : filteredProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-[24px] border border-dashed border-gray-200 bg-gray-50 py-16 text-center">
-              <Package size={34} className="text-gray-300" />
+            <Package size={34} className="text-gray-300" />
               <p className="mt-3 text-sm font-medium text-gray-500">No products match this view</p>
               <p className="mt-1 max-w-sm text-sm text-gray-400">Try a different search or add the first medicine to start your catalog.</p>
             </div>
           ) : (
-            filteredProducts.map((product, index) => {
-              const id = getRowKey(product, index);
-              const stock = resolveStock(product, id);
-              const batch = product.batch_no || product['Batch Number'] || '';
-              const expiry = product.expiry_date || product['Expiry Date'] || '-';
-              const price = resolvePrice(product);
-              const category = product.category || 'OTC';
-              const productBatches = getBatchList(product, id);
-              const earliestExpiry = productBatches[0]?.expiryDate || expiry;
-              const expiryDays = getExpiryDays(product, id);
+            filteredProducts.map((product) => {
+              const id = product.computedId;
+              const stock = product.computedStock;
+              const price = product.computedPrice;
+              const buyPrice = product.computedPurchasePrice;
+              const earliestExpiry = product.computedEarliestExpiry;
+              const expiryDays = product.computedExpiryDays;
               const expiryBadge = getExpiryBadge(expiryDays);
-              const batchLabel = batch ? `Batch ${batch}` : '+ Add Batch';
+              const batchLabel = product.batch_no || product['Batch Number'] ? `Batch ${product.batch_no || product['Batch Number']}` : '+ Add Batch';
               return (
                 <article 
                   key={id} 
                   onClick={(e) => {
-                    // Don't trigger if clicking buttons or inputs inside
                     if ((e.target as HTMLElement).closest('button, input, select')) return;
                     addBillItem(product, id);
                   }}
                   className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 px-3 py-3 cursor-pointer ${
                     selected[id] 
                       ? 'border-emerald-600 bg-emerald-50/50 shadow-[0_8px_30px_rgba(5,150,105,0.15)] ring-1 ring-emerald-600/20' 
-                      : 'border-gray-100 bg-white hover:border-emerald-200 hover:shadow-md'
+                      : 'border-gray-100 bg-white hover:border-emerald-200 hover:shadow-md active:border-emerald-300'
                   }`}
                 >
                   {selected[id] && (
@@ -907,15 +962,15 @@ const ProductTable = () => {
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex items-start gap-3">
                       <button
-                        onClick={() => addBillItem(product, id)}
-                        className={`mt-1 grid h-8 w-8 place-items-center rounded-xl border transition ${
+                        onClick={(e) => { e.stopPropagation(); addBillItem(product, id); }}
+                        className={`mt-1 grid h-8 w-8 place-items-center rounded-xl border transition-all active:scale-90 ${
                           selected[id]
                             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                             : 'border-gray-200 bg-white text-gray-400'
                         }`}
                         aria-label="Add to bill"
                       >
-                        {selected[id] ? <Check size={16} /> : <ShoppingCart size={16} />}
+                        {selected[id] ? <Check size={16} /> : <Plus size={16} />}
                       </button>
 
                       <div className="min-w-0">
@@ -937,21 +992,20 @@ const ProductTable = () => {
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-gray-600">
                           <button
                             type="button"
-                            onClick={() => openBatchDialog(product, id)}
+                            onClick={(e) => { e.stopPropagation(); openBatchDialog(product, id); }}
                             className={`group flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold tracking-tight transition-all active:scale-95 ${
-                              batch
+                              product.batch_no || product['Batch Number']
                                 ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 : 'bg-rose-50 text-rose-600 hover:bg-rose-100 ring-1 ring-rose-200/50'
                             }`}
                           >
-                            <Plus size={12} className={batch ? 'hidden' : 'block'} />
                             {batchLabel}
                           </button>
 
                           <div className="flex items-center gap-2">
                             <span className="flex items-center gap-1 rounded-full bg-gray-50 px-2.5 py-1 font-semibold text-gray-600 ring-1 ring-gray-200/50">
                               <Package size={12} className="text-gray-400" />
-                              Stock: {formatStockLabel(product, id)}
+                              Stock: {formatPackAmount(stock, product)}
                             </span>
 
                             {expiryBadge && (
@@ -976,23 +1030,29 @@ const ProductTable = () => {
                             Exp: {displayExpiry(earliestExpiry)}
                           </span>
                           <span className="h-1 w-1 rounded-full bg-gray-300" />
-                          <span>Category: {category}</span>
+                          <span>Category: {product.category || 'OTC'}</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 lg:gap-2.5">
-                      <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2">
+                      <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 transition-colors hover:border-emerald-200">
                         <div className="leading-tight">
-                          <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400">Sell</p>
-                          <p className="text-sm font-semibold text-gray-900">Rs {price.toFixed(2)}</p>
+                          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-600">Sale Price</p>
+                          <p className="text-sm font-bold text-gray-900">₹{price.toFixed(2)}</p>
+                        </div>
+                      </div>
+                      <div className="inline-flex items-center gap-2 rounded-full border border-gray-100 bg-gray-50/50 px-3 py-2">
+                        <div className="leading-tight">
+                          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">Buying</p>
+                          <p className="text-sm font-medium text-gray-500">₹{buyPrice.toFixed(2)}</p>
                         </div>
                       </div>
 
                       <button
                         type="button"
-                        onClick={() => openProductDrawer(product, id)}
-                        className="grid h-9 w-9 place-items-center rounded-full border border-gray-200 bg-white text-gray-700"
+                        onClick={(e) => { e.stopPropagation(); openProductDrawer(product, id); }}
+                        className="grid h-9 w-9 place-items-center rounded-full border border-gray-200 bg-white text-gray-700 transition-all hover:bg-gray-50 active:scale-90"
                         title="Edit product"
                       >
                         <Pencil size={14} />
@@ -1000,27 +1060,27 @@ const ProductTable = () => {
 
                       <button
                         type="button"
-                        onClick={() => toggleExpandedProduct(id)}
-                        className="grid h-9 w-9 place-items-center rounded-full border border-gray-200 bg-white text-gray-700"
+                        onClick={(e) => { e.stopPropagation(); toggleExpandedProduct(id); }}
+                        className="grid h-9 w-9 place-items-center rounded-full border border-gray-200 bg-white text-gray-700 transition-all hover:bg-gray-50 active:scale-90"
                         title={expandedProductId === id ? 'Hide batches' : 'Show batches'}
                       >
                         <Package size={14} />
                       </button>
 
                       <button
-                        onClick={() => addBillItem(product, id)}
-                        className={`grid h-9 w-9 place-items-center rounded-full ${
-                          selected[id] ? 'bg-emerald-600 text-white' : 'bg-[#0a2e2a] text-[#bbed3b]'
+                        onClick={(e) => { e.stopPropagation(); addBillItem(product, id); }}
+                        className={`grid h-9 w-9 place-items-center rounded-full transition-all active:scale-90 ${
+                          selected[id] ? 'bg-emerald-600 text-white shadow-md' : 'bg-[#0a2e2a] text-[#bbed3b] hover:bg-[#0f423d]'
                         }`}
                         title={selected[id] ? 'Added to bill' : 'Add to bill'}
                       >
-                        <ShoppingCart size={14} />
+                        {selected[id] ? <Check size={14} /> : <Plus size={14} />}
                       </button>
 
                       <button
                         type="button"
-                        onClick={() => confirmDeleteProduct(product, id)}
-                        className="grid h-9 w-9 place-items-center rounded-full border border-gray-200 bg-white text-gray-600"
+                        onClick={(e) => { e.stopPropagation(); confirmDeleteProduct(product, id); }}
+                        className="grid h-9 w-9 place-items-center rounded-full border border-gray-200 bg-white text-gray-600 transition-all hover:bg-rose-50 hover:text-rose-600 active:scale-90"
                         title="Delete product"
                       >
                         <Trash2 size={14} />
@@ -1097,9 +1157,9 @@ const ProductTable = () => {
                         </div>
                       </div>
                       <div className="space-y-2">
-                        {productBatches.length > 0 ? (
+                        {product.computedBatches.length > 0 ? (
                           (() => {
-                            const filteredBatches = productBatches
+                            const filteredBatches = product.computedBatches
                               .filter(b => b.availableBaseUnits > 0)
                               .reduce((acc: any[], current) => {
                                 const exists = acc.find(item => item.batchNo.trim().toLowerCase() === current.batchNo.trim().toLowerCase());
