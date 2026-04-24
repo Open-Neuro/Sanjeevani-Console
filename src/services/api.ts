@@ -29,6 +29,20 @@ const authFetch = async (url: string, options: RequestInit = {}) => {
     return response;
 };
 
+const readErrorMessage = async (response: Response, fallback: string) => {
+    try {
+        const data = await response.json();
+        return data.detail || data.message || data.error || fallback;
+    } catch {
+        try {
+            const text = await response.text();
+            return text || fallback;
+        } catch {
+            return fallback;
+        }
+    }
+};
+
 export const apiGet = async (path: string) => {
     const response = await authFetch(`${API_BASE_URL}${path}`);
     if (!response.ok) throw new Error(`Failed to fetch ${path}`);
@@ -128,7 +142,24 @@ export const addProduct = async (product: any) => {
         method: 'POST',
         body: JSON.stringify(product),
     });
-    if (!response.ok) throw new Error('Failed to add product');
+    if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to add product'));
+    return response.json();
+};
+
+export const updateProduct = async (productId: string, product: any) => {
+    const response = await authFetch(`${API_BASE_URL}/products/${encodeURIComponent(productId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(product),
+    });
+    if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to update product'));
+    return response.json();
+};
+
+export const deleteProduct = async (productId: string) => {
+    const response = await authFetch(`${API_BASE_URL}/products/${encodeURIComponent(productId)}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to delete product'));
     return response.json();
 };
 
@@ -137,7 +168,16 @@ export const bulkAddProducts = async (products: any[]) => {
         method: 'POST',
         body: JSON.stringify(products),
     });
-    if (!response.ok) throw new Error('Failed to bulk add products');
+    if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to bulk add products'));
+    return response.json();
+};
+
+export const bulkImportPreview = async (products: any[]) => {
+    const response = await authFetch(`${API_BASE_URL}/products/bulk-import-preview`, {
+        method: 'POST',
+        body: JSON.stringify(products),
+    });
+    if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to preview import'));
     return response.json();
 };
 
