@@ -430,7 +430,7 @@ const ProductTable = () => {
       batch_no: '',
       expiry_month_year: '',
       quantity: 0,
-      supplier_name: resolveCompany(product),
+      supplier_name: resolveCompany(product) || '',
       purchase_rate_per_base: '',
       mrp_per_base: String(resolvePrice(product) || ''),
     });
@@ -573,6 +573,13 @@ const ProductTable = () => {
 
   const saveProduct = async (event: FormEvent) => {
     event.preventDefault();
+    
+    if (!editingProductId && products.some(p => resolveMedicineTitle(p).trim().toLowerCase() === form.medicine_name.trim().toLowerCase())) {
+      setMessage(`Medicine "${form.medicine_name}" already exists in the system.`);
+      setSaving(false);
+      return;
+    }
+
     setSaving(true);
     setMessage(null);
     try {
@@ -594,6 +601,7 @@ const ProductTable = () => {
         packaging: form.packaging,
         base_uom: form.packaging.base_uom,
         barcodes: form.barcode ? [{ code: form.barcode, level: 'unit', is_primary: true }] : undefined,
+        product_image_url: form.product_image_url,
       };
       if (isEditing) {
         await updateProduct(editingProductId!, payload);
@@ -810,25 +818,8 @@ const ProductTable = () => {
           </div>
         )}
 
-        {/* Expiry alert banners */}
-        {(() => {
-          const expiredCount = products.filter(p => { const d = getExpiryDays(p, resolveProductKey(p)); return d !== null && d < 0; }).length;
-          const soonCount = products.filter(p => { const d = getExpiryDays(p, resolveProductKey(p)); return d !== null && d >= 0 && d <= 30; }).length;
-          return (
-            <>
-              {expiredCount > 0 && (
-                <button onClick={() => setFilter('expiry')} className="mb-2 flex w-full items-center gap-2 rounded-2xl border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 text-left hover:bg-red-100 transition">
-                  <AlertTriangle size={15} /> {expiredCount} medicine{expiredCount > 1 ? 's' : ''} expired &middot; click to filter
-                </button>
-              )}
-              {soonCount > 0 && (
-                <button onClick={() => setFilter('expiry')} className="mb-2 flex w-full items-center gap-2 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-700 text-left hover:bg-amber-100 transition">
-                  <Clock size={15} /> {soonCount} medicine{soonCount > 1 ? 's' : ''} expiring within 30 days
-                </button>
-              )}
-            </>
-          );
-        })()}
+        {/* Alerts moved to individual cards for a cleaner integrated UI */}
+
 
 
         <div className="space-y-3">
@@ -892,42 +883,51 @@ const ProductTable = () => {
                           <button
                             type="button"
                             onClick={() => openBatchDialog(product, id)}
-                            className={`rounded-full px-2.5 py-1 font-semibold transition ${
+                            className={`group flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold tracking-tight transition-all active:scale-95 ${
                               batch
-                                ? 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-                                : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+                                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                : 'bg-rose-50 text-rose-600 hover:bg-rose-100 ring-1 ring-rose-200/50'
                             }`}
                           >
+                            <Plus size={12} className={batch ? 'hidden' : 'block'} />
                             {batchLabel}
                           </button>
-                          <span className="rounded-full bg-gray-50 px-2.5 py-1 font-semibold text-gray-700">Exp: {displayExpiry(earliestExpiry)}</span>
-                          {expiryBadge ? (
-                            <span className={`rounded-full px-2.5 py-1 font-semibold ${expiryBadge.className}`}>
-                              {expiryBadge.label}
+
+                          <div className="flex items-center gap-2">
+                            <span className="flex items-center gap-1 rounded-full bg-gray-50 px-2.5 py-1 font-semibold text-gray-600 ring-1 ring-gray-200/50">
+                              <Package size={12} className="text-gray-400" />
+                              Stock: {formatStockLabel(product, id)}
                             </span>
-                          ) : null}
-                          <span className="rounded-full bg-gray-50 px-2.5 py-1 font-semibold text-gray-700">Stock: {formatStockLabel(product, id)}</span>
-                          <span className="rounded-full bg-gray-50 px-2.5 py-1 font-semibold text-gray-700">Category: {category}</span>
-                        </div>
-                        {filter === 'expiry' && getExpiryDays(product, id) !== null && (
-                          <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-rose-100 bg-rose-50 px-3 py-1 text-[11px] font-semibold text-rose-700">
-                        <span>{getExpiryDays(product, id)} day(s) left</span>
+
+                            {/* Integrated Status Badges */}
+                            {expiryBadge && (
+                              <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 font-bold ring-1 ${expiryBadge.className.includes('red') ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-amber-50 text-amber-700 ring-amber-200'}`}>
+                                <AlertTriangle size={12} />
+                                {expiryBadge.label}
+                              </span>
+                            )}
+                            
+                            {resolveStock(product, id) < 20 && resolveStock(product, id) > 0 && (
+                              <span className="flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 font-bold text-orange-700 ring-1 ring-orange-200">
+                                <TrendingUp size={12} className="rotate-180" />
+                                Low Stock
+                              </span>
+                            )}
                           </div>
-                        )}
+                        </div>
+
+                        <div className="mt-3 flex items-center gap-4 text-[11px] font-medium text-gray-400">
+                          <span className="flex items-center gap-1">
+                            <Clock size={12} />
+                            Exp: {displayExpiry(earliestExpiry)}
+                          </span>
+                          <span className="h-1 w-1 rounded-full bg-gray-300" />
+                          <span>Category: {category}</span>
+                        </div>
                       </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 lg:gap-2.5">
-                      <div className={`inline-flex items-center gap-2 rounded-full px-3 py-2 ${stock === 0 ? 'bg-red-50' : stock < 20 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
-                        <Package size={13} className={stock === 0 ? 'text-red-500' : stock < 20 ? 'text-amber-600' : 'text-emerald-600'} />
-                        <div className="leading-tight">
-                          <p className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${stock === 0 ? 'text-red-500' : stock < 20 ? 'text-amber-600' : 'text-emerald-600'}`}>Stock</p>
-                        <p className={`text-sm font-semibold ${stock === 0 ? 'text-red-700' : stock < 20 ? 'text-amber-700' : 'text-emerald-700'}`}>
-                            {formatStockLabel(product, id)}
-                          </p>
-                        </div>
-                      </div>
-
                       <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2">
                         <div className="leading-tight">
                           <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400">Sell</p>
@@ -1013,15 +1013,35 @@ const ProductTable = () => {
                               batchItem.expiryDate ? Math.ceil((new Date(batchItem.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null,
                             );
                             return (
-                              <div key={`${batchItem.key}-${batchIndex}`} className="rounded-xl border border-gray-100 bg-white px-3 py-2">
-                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600">
-                                  <span className="font-semibold text-gray-900">Batch {batchItem.batchNo}</span>
-                                  <span>Exp {batchItem.expiryDate || '-'}</span>
-                                  {batchBadge ? <span className={`rounded-full px-2 py-0.5 font-semibold ${batchBadge.className}`}>{batchBadge.label}</span> : null}
-                                  <span>{formatPackAmount(batchItem.availableBaseUnits, product)}</span>
-                                  {batchItem.supplierName ? <span>Supplier {batchItem.supplierName}</span> : null}
-                                  {batchItem.purchasePrice ? <span>Buy Rs {batchItem.purchasePrice.toFixed(2)}</span> : null}
-                                  {batchItem.sellingPrice ? <span>Sell Rs {batchItem.sellingPrice.toFixed(2)}</span> : null}
+                              <div key={`${batchItem.key}-${batchIndex}`} className="rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm transition hover:border-gray-200">
+                                <div className="grid grid-cols-2 gap-y-2 text-[11px] md:grid-cols-4 md:gap-x-4 md:gap-y-0">
+                                  <div className="flex flex-col">
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Batch No</span>
+                                    <span className="font-bold text-gray-900">{batchItem.batchNo}</span>
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Expiry</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-semibold text-gray-700">{batchItem.expiryDate || '-'}</span>
+                                      {batchBadge ? <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-tight ${batchBadge.className}`}>{batchBadge.label}</span> : null}
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Stock</span>
+                                    <span className="font-semibold text-emerald-700">{formatPackAmount(batchItem.availableBaseUnits, product)}</span>
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Pricing</span>
+                                    <div className="flex items-center gap-1">
+                                      <span className="font-medium text-gray-500 line-through">₹{batchItem.purchasePrice.toFixed(1)}</span>
+                                      <span className="font-bold text-gray-900">₹{batchItem.sellingPrice.toFixed(1)}</span>
+                                      {batchItem.purchasePrice > 0 && batchItem.sellingPrice > 0 && (
+                                        <span className="text-[10px] font-bold text-emerald-600">
+                                          ({(((batchItem.sellingPrice - batchItem.purchasePrice) / batchItem.sellingPrice) * 100).toFixed(0)}% Margin)
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             );
@@ -1137,7 +1157,7 @@ const ProductTable = () => {
                         <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
                             <p className="truncate text-[15px] font-semibold leading-tight text-[#061412]">{resolveMedicineTitle(item.product)}</p>
-                            <p className="mt-0.5 text-xs text-gray-500">{resolveCompany(item.product) || 'Selected medicine'} Ã¢â‚¬Â¢ Rs {price.toFixed(2)} each</p>
+                            <p className="mt-0.5 text-xs text-gray-500">{resolveCompany(item.product) || 'Selected medicine'} &middot; Rs {price.toFixed(2)} each</p>
                             {item.batch ? (
                               <div className="mt-2 flex flex-wrap items-center gap-2">
                                 <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700">
@@ -1155,7 +1175,7 @@ const ProductTable = () => {
                                     {item.availableBatches.map((batch) => (
                                       <option key={batch.key} value={batch.key}>
                                         {batch.batchNo}
-                                        {batch.expiryDate ? ` Ã¢â‚¬Â¢ ${batch.expiryDate}` : ''}
+                                        {batch.expiryDate ? ` &middot; ${batch.expiryDate}` : ''}
                                       </option>
                                     ))}
                                   </select>
@@ -1235,9 +1255,20 @@ const ProductTable = () => {
             <form onSubmit={saveBatch} className="flex-1 space-y-4 overflow-y-auto p-6">
               <div className="grid gap-4 md:grid-cols-2">
                 <Field label="Batch Number" value={batchForm.batch_no} onChange={(value) => setBatchForm({ ...batchForm, batch_no: value })} />
-                <MonthYearField label="Expiry (MM/YYYY)" value={batchForm.expiry_month_year} onChange={(value) => setBatchForm({ ...batchForm, expiry_month_year: value })} required />                <Field label="Quantity" value={String(batchForm.quantity)} onChange={(value) => setBatchForm({ ...batchForm, quantity: Number(value) || 0 })} type="number" required />
+                <MonthYearField label="Expiry (MM/YYYY)" value={batchForm.expiry_month_year} onChange={(value) => setBatchForm({ ...batchForm, expiry_month_year: value })} required />
+                <label className="block">
+                  <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Quantity *</span>
+                  <input
+                    required
+                    type="number"
+                    value={batchForm.quantity}
+                    onChange={(e) => setBatchForm({ ...batchForm, quantity: Number(e.target.value) || 0 })}
+                    onFocus={(e) => e.target.select()}
+                    className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-[#bbed3b]"
+                  />
+                </label>
                 <Field label="Supplier Name" value={batchForm.supplier_name} onChange={(value) => setBatchForm({ ...batchForm, supplier_name: value })} />
-                <Field label="Purchase Price" value={batchForm.purchase_rate_per_base} onChange={(value) => setBatchForm({ ...batchForm, purchase_rate_per_base: value })} type="number" required />
+                <Field label="Purchase Price *" value={batchForm.purchase_rate_per_base} onChange={(value) => setBatchForm({ ...batchForm, purchase_rate_per_base: value })} type="number" required />
                 <Field label="Selling / MRP" value={batchForm.mrp_per_base} onChange={(value) => setBatchForm({ ...batchForm, mrp_per_base: value })} type="number" />
               </div>
 
