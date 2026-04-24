@@ -2,11 +2,14 @@ import { useEffect, useMemo, useRef, useState, useCallback, type Dispatch, type 
 import {
   AlertCircle,
   AlertTriangle,
+  ArrowRight,
+  Camera,
   Check,
   Clock,
   Image as ImageIcon,
   Pencil,
   Loader2,
+  Minus,
   Package,
   Plus,
   Search,
@@ -17,6 +20,17 @@ import {
   X,
 } from 'lucide-react';
 import { addProduct, applyStockActions, bulkAddProducts, bulkImportPreview, deleteProduct, fetchProducts, fetchProductBatches, updateProduct } from '../services/api';
+
+type UnitType = 'unit' | 'strip' | 'box';
+
+interface ExtractedProduct {
+  medicine_name: string;
+  expiry_date: string;
+  batch_no: string;
+  manufacturer: string;
+  mrp: string;
+  confidence: number;
+}
 
 type PackBreakdown = { box: number; strip: number; unit: number };
 
@@ -149,7 +163,7 @@ const emptyForm = (): ProductForm => ({
   product_image_url: '',
 });
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Date helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// --- Date helpers ---
 const toMonthYear = (dateStr?: string): string => {
   if (!dateStr) return '';
   const m = dateStr.match(/^(\d{4})-(\d{2})-\d{2}$/);
@@ -167,7 +181,7 @@ const fromMonthYear = (my: string): string => {
 };
 const displayExpiry = (d?: string) => toMonthYear(d) || d || '-';
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CSV parser Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// --- CSV parser ---
 const parseCSV = (text: string): ImportRow[] => {
   const lines = text.split('\n').filter(l => l.trim());
   if (lines.length < 2) return [];
@@ -177,7 +191,7 @@ const parseCSV = (text: string): ImportRow[] => {
     const obj: Record<string, string> = {};
     headers.forEach((h, i) => { obj[h] = vals[i] || ''; });
     return {
-      medicine_name: obj.medicine_name || obj.medicine_name || '',
+      medicine_name: obj.medicine_name || '',
       category: obj.category || 'General',
       generic_name: obj.generic_name || '',
       brand_name: obj.brand_name || '',
@@ -229,6 +243,12 @@ const ProductTable = () => {
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importPreviewing, setImportPreviewing] = useState(false);
   const [importSaving, setImportSaving] = useState(false);
+  const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
+  const [ocrProcessing, setOcrProcessing] = useState(false);
+  const [extractedProduct, setExtractedProduct] = useState<ExtractedProduct | null>(null);
+  const [productImage, setProductImage] = useState<string | null>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  const [selectedUnitType, setSelectedUnitType] = useState<UnitType>('strip');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qtyAutoSelectUsed = useRef<Record<string, boolean>>({});
 
@@ -357,6 +377,20 @@ const ProductTable = () => {
     qtyAutoSelectUsed.current[key] = false;
   };
 
+  const openOcrDialog = () => {
+    setOcrDialogOpen(true);
+    setProductImage(null);
+    setExtractedProduct(null);
+    setOcrError(null);
+  };
+
+  const closeOcrDialog = () => {
+    setOcrDialogOpen(false);
+    setProductImage(null);
+    setExtractedProduct(null);
+    setOcrError(null);
+  };
+
   const loadProducts = async () => {
     setLoading(true);
     try {
@@ -455,12 +489,12 @@ const ProductTable = () => {
       [key]: {
         key,
         product,
-        qty: 1,
+        qty: 0,
         batch: null,
         availableBatches: [],
       },
     }));
-    setQtyDrafts((prev) => ({ ...prev, [key]: '1' }));
+    setQtyDrafts((prev) => ({ ...prev, [key]: '' }));
     qtyAutoSelectUsed.current[key] = false;
   };
 
@@ -619,6 +653,7 @@ const ProductTable = () => {
       setSaving(false);
     }
   };
+
   const saveBatch = async (event: FormEvent) => {
     event.preventDefault();
     if (!batchDialogProduct || !batchDialogProductId) return;
@@ -643,7 +678,8 @@ const ProductTable = () => {
           },
         ],
       };
-      await applyStockActions(payload, `batch-add:${batchDialogProductId}:${batchForm.batch_no || Date.now()}`);      setMessage('Batch added successfully');
+      await applyStockActions(payload, `batch-add:${batchDialogProductId}:${batchForm.batch_no || Date.now()}`);
+      setMessage('Batch added successfully');
       closeBatchDialog();
       await loadProducts();
       await refreshBatchesForProduct(batchDialogProductId);
@@ -656,6 +692,36 @@ const ProductTable = () => {
     } finally {
       setBatchSaving(false);
     }
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const rows = parseCSV(text);
+    if (!rows.length) { setMessage('No valid rows found in file'); return; }
+    setImportPreviewing(true);
+    try {
+      const preview = await bulkImportPreview(rows.map(r => ({ medicine_name: r.medicine_name, category: r.category, generic_name: r.generic_name, brand_name: r.brand_name, supplier_name: r.supplier_name, stock: r.stock, expiry_date: r.expiry_date, mrp: r.mrp, selling_price: r.selling_price, purchase_price: r.purchase_price, schedule: r.schedule, batch_no: r.batch_no })));
+      const dupes = (preview.duplicates || []).map((d: any) => d.medicine_name);
+      const tagged = rows.map(r => ({ ...r, resolution: (dupes.includes(r.medicine_name) ? 'skip' : 'new') as 'new'|'skip'|'new_batch' }));
+      setImportRows(tagged);
+      setImportDialogOpen(true);
+    } catch { setMessage('Could not preview import'); } finally { setImportPreviewing(false); }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const commitImport = async () => {
+    const toAdd = importRows.filter(r => r.resolution !== 'skip');
+    if (!toAdd.length) { setImportDialogOpen(false); return; }
+    setImportSaving(true);
+    try {
+      const res = await bulkAddProducts(toAdd.map(r => ({ medicine_name: r.medicine_name, category: r.category, generic_name: r.generic_name, brand_name: r.brand_name, supplier_name: r.supplier_name, stock: r.stock, expiry_date: r.expiry_date, mrp: r.mrp, selling_price: r.selling_price, purchase_price: r.purchase_price, schedule: r.schedule, batch_no: r.batch_no })));
+      setMessage(`Import done: ${res.added} added, ${(res.skipped||[]).length} skipped.`);
+      setImportDialogOpen(false);
+      setImportRows([]);
+      await loadProducts();
+    } catch (err) { setMessage(err instanceof Error ? err.message : 'Import failed'); } finally { setImportSaving(false); }
   };
 
   const createBill = async () => {
@@ -692,36 +758,6 @@ const ProductTable = () => {
     }
   };
 
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const text = await file.text();
-    const rows = parseCSV(text);
-    if (!rows.length) { setMessage('No valid rows found in file'); return; }
-    setImportPreviewing(true);
-    try {
-      const preview = await bulkImportPreview(rows.map(r => ({ medicine_name: r.medicine_name, category: r.category, generic_name: r.generic_name, brand_name: r.brand_name, supplier_name: r.supplier_name, stock: r.stock, expiry_date: r.expiry_date, mrp: r.mrp, selling_price: r.selling_price, purchase_price: r.purchase_price, schedule: r.schedule, batch_no: r.batch_no })));
-      const dupes = (preview.duplicates || []).map((d: any) => d.medicine_name);
-      const tagged = rows.map(r => ({ ...r, resolution: (dupes.includes(r.medicine_name) ? 'skip' : 'new') as 'new'|'skip'|'new_batch' }));
-      setImportRows(tagged);
-      setImportDialogOpen(true);
-    } catch { setMessage('Could not preview import'); } finally { setImportPreviewing(false); }
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const commitImport = async () => {
-    const toAdd = importRows.filter(r => r.resolution !== 'skip');
-    if (!toAdd.length) { setImportDialogOpen(false); return; }
-    setImportSaving(true);
-    try {
-      const res = await bulkAddProducts(toAdd.map(r => ({ medicine_name: r.medicine_name, category: r.category, generic_name: r.generic_name, brand_name: r.brand_name, supplier_name: r.supplier_name, stock: r.stock, expiry_date: r.expiry_date, mrp: r.mrp, selling_price: r.selling_price, purchase_price: r.purchase_price, schedule: r.schedule, batch_no: r.batch_no })));
-      setMessage(`Import done: ${res.added} added, ${(res.skipped||[]).length} skipped.`);
-      setImportDialogOpen(false);
-      setImportRows([]);
-      await loadProducts();
-    } catch (err) { setMessage(err instanceof Error ? err.message : 'Import failed'); } finally { setImportSaving(false); }
-  };
-
   return (
     <div className="space-y-4">
       <section className="rounded-[28px] border border-gray-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
@@ -732,6 +768,12 @@ const ProductTable = () => {
               className="inline-flex items-center gap-2 rounded-2xl bg-[#0a2e2a] px-3.5 py-2.5 text-sm font-semibold text-[#bbed3b]"
             >
               <Plus size={16} /> Add Product
+            </button>
+            <button
+              onClick={openOcrDialog}
+              className="inline-flex items-center gap-2 rounded-2xl border border-cyan-200 bg-cyan-50 px-3.5 py-2.5 text-sm font-semibold text-cyan-700"
+            >
+              <Camera size={16} /> Scan Product
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -806,7 +848,6 @@ const ProductTable = () => {
           <span className="rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-600">{filteredProducts.length} shown</span>
         </div>
 
-        {/* Recently added chips */}
         {recentlyAdded.length > 0 && (
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-600">Recently added:</span>
@@ -817,10 +858,6 @@ const ProductTable = () => {
             ))}
           </div>
         )}
-
-        {/* Alerts moved to individual cards for a cleaner integrated UI */}
-
-
 
         <div className="space-y-3">
           {loading ? (
@@ -841,14 +878,32 @@ const ProductTable = () => {
               const expiry = product.expiry_date || product['Expiry Date'] || '-';
               const price = resolvePrice(product);
               const category = product.category || 'OTC';
-              const selectedQty = selected[id]?.qty || 0;
               const productBatches = getBatchList(product, id);
               const earliestExpiry = productBatches[0]?.expiryDate || expiry;
               const expiryDays = getExpiryDays(product, id);
               const expiryBadge = getExpiryBadge(expiryDays);
               const batchLabel = batch ? `Batch ${batch}` : '+ Add Batch';
               return (
-                <article key={id} className="rounded-2xl border border-gray-100 bg-white px-3 py-3 transition hover:border-emerald-100 hover:shadow-sm">
+                <article 
+                  key={id} 
+                  onClick={(e) => {
+                    // Don't trigger if clicking buttons or inputs inside
+                    if ((e.target as HTMLElement).closest('button, input, select')) return;
+                    addBillItem(product, id);
+                  }}
+                  className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 px-3 py-3 cursor-pointer ${
+                    selected[id] 
+                      ? 'border-emerald-600 bg-emerald-50/50 shadow-[0_8px_30px_rgba(5,150,105,0.15)] ring-1 ring-emerald-600/20' 
+                      : 'border-gray-100 bg-white hover:border-emerald-200 hover:shadow-md'
+                  }`}
+                >
+                  {selected[id] && (
+                    <div className="absolute right-0 top-0 h-16 w-16 overflow-hidden">
+                      <div className="absolute top-2 right-[-20px] rotate-45 bg-emerald-600 px-6 py-0.5 text-[8px] font-black uppercase tracking-widest text-white shadow-sm">
+                        Selected
+                      </div>
+                    </div>
+                  )}
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex items-start gap-3">
                       <button
@@ -899,7 +954,6 @@ const ProductTable = () => {
                               Stock: {formatStockLabel(product, id)}
                             </span>
 
-                            {/* Integrated Status Badges */}
                             {expiryBadge && (
                               <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 font-bold ring-1 ${expiryBadge.className.includes('red') ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-amber-50 text-amber-700 ring-amber-200'}`}>
                                 <AlertTriangle size={12} />
@@ -907,7 +961,7 @@ const ProductTable = () => {
                               </span>
                             )}
                             
-                            {resolveStock(product, id) < 20 && resolveStock(product, id) > 0 && (
+                            {stock < 20 && stock > 0 && (
                               <span className="flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 font-bold text-orange-700 ring-1 ring-orange-200">
                                 <TrendingUp size={12} className="rotate-180" />
                                 Low Stock
@@ -934,22 +988,6 @@ const ProductTable = () => {
                           <p className="text-sm font-semibold text-gray-900">Rs {price.toFixed(2)}</p>
                         </div>
                       </div>
-                      {(() => {
-                        const buyPrice = Number(product.purchase_price ?? product['Purchase Price'] ?? 0);
-                        if (buyPrice > 0 && price > 0) {
-                          const margin = ((price - buyPrice) / price * 100).toFixed(0);
-                          return (
-                            <div className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-2">
-                              <TrendingUp size={11} className="text-emerald-600" />
-                              <div className="leading-tight">
-                                <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-500">Margin</p>
-                                <p className="text-sm font-semibold text-emerald-700">{margin}%</p>
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
 
                       <button
                         type="button"
@@ -990,6 +1028,58 @@ const ProductTable = () => {
                     </div>
                   </div>
 
+                  {selected[id] && (
+                    <div className="mt-3 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/30 p-2 ring-1 ring-emerald-500/10">
+                      <div className="flex items-center gap-3">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Bill Quantity</span>
+                          <span className="text-xs font-bold text-emerald-900">
+                            Line Total: ₹{(selected[id].qty * resolveBillPrice(selected[id])).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 rounded-lg border border-gray-100 bg-gray-50/50 p-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBillQty(id, selected[id].qty - 1);
+                          }}
+                          className="grid h-8 w-8 place-items-center rounded-md bg-white text-gray-600 shadow-sm transition hover:bg-rose-50 hover:text-rose-600 active:scale-90"
+                        >
+                          <Minus size={14} />
+                        </button>
+                        <input
+                          type="number"
+                          value={qtyDrafts[id] ?? String(selected[id].qty)}
+                          onChange={(e) => setBillQty(id, parseInt(e.target.value) || 0)}
+                          className="h-8 w-12 border-none bg-transparent text-center text-sm font-bold text-gray-900 focus:outline-none focus:ring-0"
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBillQty(id, selected[id].qty + 1);
+                          }}
+                          className="grid h-8 w-8 place-items-center rounded-md bg-white text-gray-600 shadow-sm transition hover:bg-emerald-50 hover:text-emerald-600 active:scale-90"
+                        >
+                          <Plus size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeBillItem(id);
+                          }}
+                          className="ml-1 grid h-8 w-8 place-items-center rounded-md bg-rose-100 text-rose-600 shadow-sm transition hover:bg-rose-200 active:scale-90"
+                          title="Remove from bill"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {expandedProductId === id && (
                     <div className="mt-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-3">
                       <div className="mb-2 flex items-center justify-between gap-2">
@@ -1008,11 +1098,26 @@ const ProductTable = () => {
                       </div>
                       <div className="space-y-2">
                         {productBatches.length > 0 ? (
-                          productBatches.map((batchItem, batchIndex: number) => {
-                            const batchBadge = getExpiryBadge(
-                              batchItem.expiryDate ? Math.ceil((new Date(batchItem.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null,
+                          (() => {
+                            const filteredBatches = productBatches
+                              .filter(b => b.availableBaseUnits > 0)
+                              .reduce((acc: any[], current) => {
+                                const exists = acc.find(item => item.batchNo.trim().toLowerCase() === current.batchNo.trim().toLowerCase());
+                                if (!exists) acc.push(current);
+                                return acc;
+                              }, []);
+
+                            if (filteredBatches.length === 0) return (
+                              <div className="rounded-xl border border-gray-100 bg-white px-3 py-2 text-sm text-gray-500">
+                                All batches are out of stock.
+                              </div>
                             );
-                            return (
+
+                            return filteredBatches.map((batchItem, batchIndex: number) => {
+                              const batchBadge = getExpiryBadge(
+                                batchItem.expiryDate ? Math.ceil((new Date(batchItem.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null,
+                              );
+                              return (
                               <div key={`${batchItem.key}-${batchIndex}`} className="rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm transition hover:border-gray-200">
                                 <div className="grid grid-cols-2 gap-y-2 text-[11px] md:grid-cols-4 md:gap-x-4 md:gap-y-0">
                                   <div className="flex flex-col">
@@ -1035,91 +1140,22 @@ const ProductTable = () => {
                                     <div className="flex items-center gap-1">
                                       <span className="font-medium text-gray-500 line-through">₹{batchItem.purchasePrice.toFixed(1)}</span>
                                       <span className="font-bold text-gray-900">₹{batchItem.sellingPrice.toFixed(1)}</span>
-                                      {batchItem.purchasePrice > 0 && batchItem.sellingPrice > 0 && (
-                                        <span className="text-[10px] font-bold text-emerald-600">
-                                          ({(((batchItem.sellingPrice - batchItem.purchasePrice) / batchItem.sellingPrice) * 100).toFixed(0)}% Margin)
-                                        </span>
-                                      )}
                                     </div>
                                   </div>
                                 </div>
                               </div>
                             );
-                          })
+                            });
+                          })()
                         ) : (
                           <div className="rounded-xl border border-gray-100 bg-white px-3 py-2 text-sm text-gray-500">
                             {loadingBatchesId === id ? 'Loading batches...' : 'No batch added yet'}
-                            {loadingBatchesId !== id ? (
-                              <button
-                                type="button"
-                                onClick={() => openBatchDialog(product, id)}
-                                className="mt-2 inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
-                              >
-                                <Plus size={12} />
-                                Add First Batch
-                              </button>
-                            ) : null}
                           </div>
                         )}
                       </div>
                     </div>
                   )}
 
-                  {selectedQty > 0 && (
-                    <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Bill quantity</p>
-                          {/* <p className="text-sm text-emerald-800">Use this when preparing the bill</p> */}
-                          <div className="mt-1 flex items-center gap-3">
-                            
-                            <span className="text-xs text-emerald-700">
-                              Total: Rs {billTotal.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setBillQty(id, selectedQty - 1)}
-                            className="grid h-7 w-7 place-items-center rounded-full border border-gray-200 bg-white text-sm font-semibold text-gray-700"
-                          >
-                            -
-                          </button>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={getQtyDraft(id, selectedQty)}
-                            onChange={(e) => {
-                              const next = e.target.value.replace(/[^\d]/g, '');
-                              const display = next === '' ? '0' : next;
-                              setQtyDrafts((prev) => ({ ...prev, [id]: display }));
-                              setBillQty(id, Number(display));
-                            }}
-                            onFocus={(e) => handleQtyFocus(id, e.currentTarget.value, e.currentTarget)}
-                            onBlur={(e) => handleQtyBlur(id, e.currentTarget.value)}
-                            className="w-14 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-center text-sm font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-[#bbed3b]"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setBillQty(id, selectedQty + 1)}
-                            className="grid h-7 w-7 place-items-center rounded-full border border-gray-200 bg-white text-sm font-semibold text-gray-700"
-                          >
-                            +
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCartOpen(true)}
-                            className="grid h-7 w-7 place-items-center rounded-full bg-[#0a2e2a] text-[#bbed3b]"
-                            title="Open cart"
-                          >
-                            <ShoppingCart size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </article>
               );
             })
@@ -1128,7 +1164,7 @@ const ProductTable = () => {
       </section>
 
       {cartOpen && (
-        <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px]">
+        <div className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-[2px]">
           <div className="ml-auto flex h-full w-full max-w-lg flex-col bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
               <div>
@@ -1146,7 +1182,6 @@ const ProductTable = () => {
                     <div className="rounded-[24px] border border-dashed border-gray-200 bg-gray-50 px-4 py-12 text-center">
                       <ShoppingCart size={28} className="mx-auto text-gray-300" />
                       <p className="mt-2 text-sm font-semibold text-gray-500">Cart is empty</p>
-                      <p className="mt-1 text-sm text-gray-400">Tap Add to bill on products to build the bill.</p>
                     </div>
                 ) : (
                   selectedItems.map((item) => {
@@ -1157,37 +1192,12 @@ const ProductTable = () => {
                         <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
                             <p className="truncate text-[15px] font-semibold leading-tight text-[#061412]">{resolveMedicineTitle(item.product)}</p>
-                            <p className="mt-0.5 text-xs text-gray-500">{resolveCompany(item.product) || 'Selected medicine'} &middot; Rs {price.toFixed(2)} each</p>
-                            {item.batch ? (
-                              <div className="mt-2 flex flex-wrap items-center gap-2">
-                                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700">
-                                  Batch {item.batch.batchNo}
-                                </span>
-                                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700">
-                                  Exp {item.batch.expiryDate || '-'}
-                                </span>
-                                {item.availableBatches.length > 1 ? (
-                                  <select
-                                    value={item.batch.key}
-                                    onChange={(e) => updateBillBatch(id, e.target.value)}
-                                    className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 outline-none"
-                                  >
-                                    {item.availableBatches.map((batch) => (
-                                      <option key={batch.key} value={batch.key}>
-                                        {batch.batchNo}
-                                        {batch.expiryDate ? ` &middot; ${batch.expiryDate}` : ''}
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : null}
-                              </div>
-                            ) : null}
+                            <p className="mt-0.5 text-xs text-gray-500">Rs {price.toFixed(2)} each</p>
                           </div>
-                          <button onClick={() => confirmRemoveBillItem(id)} className="rounded-full border border-gray-200 bg-white p-1.5 text-gray-400 hover:text-red-500">
+                          <button onClick={() => removeBillItem(id)} className="rounded-full border border-gray-200 bg-white p-1.5 text-gray-400 hover:text-red-500">
                             <X size={14} />
                           </button>
                         </div>
-
                         <div className="mt-2 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
                             <QtyButton label="-" onClick={() => setBillQty(id, item.qty - 1)} />
@@ -1208,10 +1218,7 @@ const ProductTable = () => {
                             />
                             <QtyButton label="+" onClick={() => setBillQty(id, item.qty + 1)} />
                           </div>
-                          <div className="text-right">
-                            <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400">Line total</p>
-                            <span className="text-sm font-semibold text-gray-900">Rs {(item.qty * price).toFixed(2)}</span>
-                          </div>
+                          <span className="text-sm font-semibold text-gray-900">Rs {(item.qty * price).toFixed(2)}</span>
                         </div>
                       </div>
                     );
@@ -1221,237 +1228,31 @@ const ProductTable = () => {
             </div>
 
             <div className="border-t border-gray-100 p-6">
-              <div className="rounded-[24px] bg-[#0a2e2a] p-4 text-white">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/60">Bill total</p>
-                <p className="mt-2 text-3xl font-semibold">Rs {billTotal.toFixed(2)}</p>
+              <div className="rounded-[24px] bg-[#0a2e2a] p-5 text-white shadow-inner">
+                <div className="flex items-center justify-between opacity-60">
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em]">Grand Total</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em]">{selectedCount} Items</p>
+                </div>
+                <p className="mt-2 text-4xl font-black tracking-tight">₹{billTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
               </div>
               <button
                 type="button"
                 onClick={createBill}
                 disabled={billingSaving}
-                className="mt-4 w-full rounded-2xl bg-[#bbed3b] px-4 py-3 text-sm font-semibold text-[#0a2e2a] disabled:opacity-70"
+                className="mt-4 w-full rounded-2xl bg-[#bbed3b] px-4 py-4 text-base font-black uppercase tracking-widest text-[#0a2e2a] transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-70"
               >
-                {billingSaving ? <Loader2 className="mx-auto animate-spin" size={18} /> : 'Create Bill'}
+                {billingSaving ? <Loader2 className="mx-auto animate-spin" size={22} /> : 'Process Bill'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {batchDialogOpen && batchDialogProduct && (
-        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm">
-          <div className="ml-auto flex h-full w-full max-w-lg flex-col bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400">Batch entry</p>
-                <h3 className="text-xl font-semibold text-[#0a2e2a]">Add Batch</h3>
-                <p className="mt-1 text-sm text-gray-500">{resolveMedicineTitle(batchDialogProduct)}</p>
-              </div>
-              <button onClick={closeBatchDialog} className="rounded-full border border-gray-200 p-2 text-gray-500">
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={saveBatch} className="flex-1 space-y-4 overflow-y-auto p-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Batch Number" value={batchForm.batch_no} onChange={(value) => setBatchForm({ ...batchForm, batch_no: value })} />
-                <MonthYearField label="Expiry (MM/YYYY)" value={batchForm.expiry_month_year} onChange={(value) => setBatchForm({ ...batchForm, expiry_month_year: value })} required />
-                <label className="block">
-                  <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Quantity *</span>
-                  <input
-                    required
-                    type="number"
-                    value={batchForm.quantity}
-                    onChange={(e) => setBatchForm({ ...batchForm, quantity: Number(e.target.value) || 0 })}
-                    onFocus={(e) => e.target.select()}
-                    className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-[#bbed3b]"
-                  />
-                </label>
-                <Field label="Supplier Name" value={batchForm.supplier_name} onChange={(value) => setBatchForm({ ...batchForm, supplier_name: value })} />
-                <Field label="Purchase Price *" value={batchForm.purchase_rate_per_base} onChange={(value) => setBatchForm({ ...batchForm, purchase_rate_per_base: value })} type="number" required />
-                <Field label="Selling / MRP" value={batchForm.mrp_per_base} onChange={(value) => setBatchForm({ ...batchForm, mrp_per_base: value })} type="number" />
-              </div>
-
-              <div className="rounded-[24px] border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
-                Batch stock is stored in base units, but the display will stay readable in the product row.
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={closeBatchDialog} className="flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700">
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={batchSaving}
-                  className="flex-1 rounded-2xl bg-[#0a2e2a] px-4 py-3 text-sm font-semibold text-[#bbed3b] disabled:opacity-70"
-                >
-                  {batchSaving ? <Loader2 className="mx-auto animate-spin" size={18} /> : 'Save Batch'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {drawerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="flex w-full max-w-2xl max-h-[92vh] flex-col rounded-3xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400">Quick create</p>
-                <h3 className="text-xl font-semibold text-[#0a2e2a]">{editingProductId ? 'Edit Product' : 'Add Product'}</h3>
-              </div>
-              <button onClick={closeProductDrawer} className="rounded-full border border-gray-200 p-2 text-gray-500">
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={saveProduct} className="flex-1 space-y-4 overflow-y-auto p-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Medicine Name *" value={form.medicine_name} onChange={(value) => setForm({ ...form, medicine_name: value })} required />
-                <Field label="Category" value={form.category} onChange={(value) => setForm({ ...form, category: value })} />
-                <Field label="Generic Name" value={form.generic_name} onChange={(value) => setForm({ ...form, generic_name: value })} />
-                <Field label="Brand Name" value={form.brand_name} onChange={(value) => setForm({ ...form, brand_name: value })} />
-                <Field label="Supplier Name" value={form.supplier_name} onChange={(value) => setForm({ ...form, supplier_name: value })} />
-                <Field label="Initial Stock" value={String(form.stock)} onChange={(value) => setForm({ ...form, stock: Number(value) || 0 })} type="number" />
-                <Field label="Batch No (leave blank for auto)" value={form.batch_no} onChange={(value) => setForm({ ...form, batch_no: value })} />
-                <MonthYearField label="Expiry (MM/YYYY)" value={form.expiry_month_year} onChange={(value) => setForm({ ...form, expiry_month_year: value })} />
-                <Field label="Purchase Price" value={String(form.purchase_price)} onChange={(value) => setForm({ ...form, purchase_price: Number(value) || 0 })} type="number" />
-                <Field label="MRP" value={String(form.mrp)} onChange={(value) => setForm({ ...form, mrp: Number(value) || 0 })} type="number" />
-                <Field label="Selling Price" value={String(form.selling_price)} onChange={(value) => setForm({ ...form, selling_price: Number(value) || 0 })} type="number" />
-              </div>
-
-              {/* Product image upload */}
-              <div>
-                <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Product Image (optional)</span>
-                <label
-                  htmlFor="product-img-upload"
-                  className="group relative flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 px-4 py-5 text-center transition hover:border-emerald-300 hover:bg-emerald-50"
-                >
-                  {form.product_image_url ? (
-                    <>
-                      <img src={form.product_image_url} alt="Product preview" className="mx-auto h-24 w-24 rounded-xl object-cover shadow-sm" />
-                      <span className="text-xs text-gray-500">Click to change image</span>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 group-hover:bg-emerald-100">
-                        <ImageIcon size={22} className="text-gray-400 group-hover:text-emerald-600" />
-                      </div>
-                      <p className="text-sm font-medium text-gray-600">Click or drag to upload product image</p>
-                      <p className="text-xs text-gray-400">PNG, JPG, WEBP · max 2 MB</p>
-                    </>
-                  )}
-                  <input
-                    id="product-img-upload"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = (ev) => setForm({ ...form, product_image_url: ev.target?.result as string });
-                      reader.readAsDataURL(file);
-                    }}
-                  />
-                </label>
-                {form.product_image_url && (
-                  <button type="button" onClick={() => setForm({ ...form, product_image_url: '' })} className="mt-1.5 text-xs font-medium text-red-500 hover:text-red-700">
-                    Remove image
-                  </button>
-                )}
-              </div>
-
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Schedule</label>
-                  <select
-                    value={form.schedule}
-                    onChange={(e) => setForm({ ...form, schedule: e.target.value, prescription_required: e.target.value !== 'OTC' })}
-                    className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-[#bbed3b]"
-                  >
-                    {SCHEDULES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <label className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={form.prescription_required}
-                    onChange={(e) => setForm({ ...form, prescription_required: e.target.checked })}
-                  />
-                  Prescription required
-                </label>
-              </div>
-
-              <div className="rounded-[24px] border border-gray-100 bg-gray-50 p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-gray-800">Packaging</p>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">Base unit only in stock</p>
-                </div>
-                <div className="grid gap-3 md:grid-cols-4">
-                  <SelectField
-                    label="Base Unit Type"
-                    value={form.packaging.base_uom}
-                    onChange={(value) => setForm({
-                      ...form,
-                      packaging: {
-                        ...form.packaging,
-                        base_uom: value,
-                      },
-                    })}
-                    options={['unit', 'tablet', 'strip', 'bottle', 'injection']}
-                  />
-                  <Field
-                    label="Unit to base"
-                    value={String(form.packaging.levels.find((item) => item.level === 'unit')?.to_base_units || 1)}
-                    onChange={(value) => updateLevel(form, setForm, 'unit', value)}
-                    type="number"
-                  />
-                  <Field
-                    label="Strip to base"
-                    value={String(form.packaging.levels.find((item) => item.level === 'strip')?.to_base_units || 10)}
-                    onChange={(value) => updateLevel(form, setForm, 'strip', value)}
-                    type="number"
-                  />
-                  <Field
-                    label="Box to base"
-                    value={String(form.packaging.levels.find((item) => item.level === 'box')?.to_base_units || 100)}
-                    onChange={(value) => updateLevel(form, setForm, 'box', value)}
-                    type="number"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={closeProductDrawer} className="flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700">
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex-1 rounded-2xl bg-[#0a2e2a] px-4 py-3 text-sm font-semibold text-[#bbed3b] disabled:opacity-70"
-                >
-                  {saving ? <Loader2 className="mx-auto animate-spin" size={18} /> : editingProductId ? 'Update Product' : 'Save Product'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Import conflict resolution dialog */}
       {importDialogOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="flex w-full max-w-2xl max-h-[90vh] flex-col rounded-3xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-violet-500">CSV Import</p>
                 <h3 className="text-xl font-semibold text-[#0a2e2a]">Review Import</h3>
                 <p className="mt-1 text-sm text-gray-500">{importRows.filter(r => r.resolution !== 'skip').length} new &middot; {importRows.filter(r => r.resolution === 'skip').length} duplicates</p>
               </div>
@@ -1462,20 +1263,17 @@ const ProductTable = () => {
                 <div key={i} className={`flex items-center justify-between rounded-2xl border px-4 py-3 ${row.resolution === 'skip' ? 'border-gray-100 bg-gray-50' : 'border-emerald-100 bg-emerald-50'}`}>
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-sm text-gray-900">{row.medicine_name}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{row.category} &middot; Stock {row.stock || 0} &middot; MRP &#8377;{row.mrp || 0}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{row.category} &middot; Stock {row.stock || 0}</p>
                   </div>
-                  <div className="flex items-center gap-2 ml-3">
-                    {row.resolution === 'skip' && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-700">Duplicate</span>}
-                    <select
-                      value={row.resolution}
-                      onChange={e => setImportRows(prev => prev.map((r, j) => j === i ? { ...r, resolution: e.target.value as any } : r))}
-                      className="rounded-xl border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-[#bbed3b]"
-                    >
-                      <option value="new">Add as New</option>
-                      <option value="new_batch">Add as New Batch</option>
-                      <option value="skip">Skip</option>
-                    </select>
-                  </div>
+                  <select
+                    value={row.resolution}
+                    onChange={e => setImportRows(prev => prev.map((r, j) => j === i ? { ...r, resolution: e.target.value as any } : r))}
+                    className="rounded-xl border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-[#bbed3b]"
+                  >
+                    <option value="new">Add as New</option>
+                    <option value="new_batch">Add as New Batch</option>
+                    <option value="skip">Skip</option>
+                  </select>
                 </div>
               ))}
             </div>
@@ -1488,11 +1286,38 @@ const ProductTable = () => {
           </div>
         </div>
       )}
+
+      {selectedCount > 0 && (
+        <div className="fixed bottom-8 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 px-6">
+          <div className="group flex items-center justify-between rounded-[32px] bg-[#02100e] p-2.5 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] ring-1 ring-white/10 backdrop-blur-xl transition-all hover:scale-[1.02]">
+            <div className="flex items-center gap-4 pl-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20">
+                <ShoppingCart size={24} className="transition-transform group-hover:rotate-12" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500/70">Current Bill</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-black text-white">₹{billTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  <span className="h-1 w-1 rounded-full bg-white/20" />
+                  <span className="text-xs font-bold text-white/50">{selectedCount} {selectedCount === 1 ? 'item' : 'items'}</span>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setCartOpen(true)}
+              className="flex items-center gap-2 rounded-2xl bg-[#bbed3b] px-6 py-4 text-sm font-black uppercase tracking-widest text-[#0a2e2a] shadow-[0_10px_20px_-5px_rgba(187,237,59,0.3)] transition-all hover:bg-[#c8f74d] active:scale-95"
+            >
+              Checkout
+              <ArrowRight size={18} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Helper components Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// --- Helper components ---
 
 const updateLevel = (
   form: ProductForm,
@@ -1514,7 +1339,7 @@ const QtyButton = ({ label, onClick }: { label: string; onClick: () => void }) =
   <button
     type="button"
     onClick={onClick}
-    className="grid h-8 w-8 place-items-center rounded-full border border-gray-200 bg-white text-base font-semibold text-gray-700"
+    className="grid h-8 w-8 place-items-center rounded-full border border-gray-200 bg-white text-base font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 active:scale-90"
   >
     {label}
   </button>
@@ -1616,4 +1441,3 @@ const MonthYearField = ({
 };
 
 export default ProductTable;
-
