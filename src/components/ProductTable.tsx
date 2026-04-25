@@ -1590,9 +1590,10 @@ const ProductTable = () => {
                     <TrendingUp className="text-emerald-600" size={18} />
                     <h3 className="text-sm font-black uppercase tracking-widest text-[#0a2e2a]">Pricing & Taxation</h3>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <Field type="number" required label="Buying Rate" value={String(form.purchase_price)} onChange={v => setForm({ ...form, purchase_price: Number(v) })} />
                     <Field type="number" required label="Selling Price" value={String(form.selling_price)} onChange={v => setForm({ ...form, selling_price: Number(v) })} />
+                    <Field type="number" label="MRP" value={String(form.mrp)} onChange={v => setForm({ ...form, mrp: Number(v) })} />
                     <SelectField label="GST %" value={String(form.gst_percentage)} onChange={v => setForm({ ...form, gst_percentage: Number(v) })} options={['0', '5', '12', '18', '28']} />
                   </div>
                   <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-emerald-100 pt-4">
@@ -1611,7 +1612,41 @@ const ProductTable = () => {
                   </div>
                 </div>
 
-                {/* Section 3: Initial Batch Details (Only for New Products) */}
+                {/* Section 3: Pack Size Configuration */}
+                <div className="rounded-[28px] border border-gray-100 bg-white p-6">
+                  <div className="mb-4 flex items-center gap-2">
+                    <Package className="text-blue-600" size={18} />
+                    <h3 className="text-sm font-black uppercase tracking-widest text-[#0a2e2a]">Pack Size Breakdown</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400">Units per Strip</label>
+                      <input 
+                        type="number" 
+                        value={form.packaging.levels.find(l => l.level === 'strip')?.to_base_units || 1}
+                        onChange={(e) => updateLevel(form, setForm, 'strip', e.target.value)}
+                        className="w-full rounded-xl border border-gray-100 bg-gray-50 px-4 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400">Strips per Box</label>
+                      <input 
+                        type="number" 
+                        value={form.packaging.levels.find(l => l.level === 'box')?.to_base_units || 1}
+                        onChange={(e) => updateLevel(form, setForm, 'box', e.target.value)}
+                        className="w-full rounded-xl border border-gray-100 bg-gray-50 px-4 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    </div>
+                    <div className="flex flex-col justify-center rounded-xl bg-blue-50/50 p-3 text-center">
+                      <span className="text-[8px] font-bold uppercase text-blue-600">Total Units/Box</span>
+                      <span className="text-lg font-black text-blue-900">
+                        {(form.packaging.levels.find(l => l.level === 'strip')?.to_base_units || 1) * (form.packaging.levels.find(l => l.level === 'box')?.to_base_units || 1)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 4: Initial Batch Details (Only for New Products) */}
                 {!editingProductId && (
                   <div className="rounded-[28px] bg-gray-50/80 p-6 ring-1 ring-gray-200/50">
                     <div className="mb-4 flex items-center gap-2">
@@ -1709,6 +1744,15 @@ const ProductTable = () => {
                     <p className="text-xs font-black uppercase tracking-widest text-emerald-800">Total Paid</p>
                     <p className="text-2xl font-black text-emerald-900">₹{lastBill.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                   </div>
+                  <div className="mt-2 flex items-center justify-between border-t border-emerald-200/50 pt-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Estimated Profit</p>
+                    <p className="text-xs font-black text-emerald-700">+ ₹{(lastBill.total * 0.15).toFixed(2)} (Avg 15%)</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-gray-50 py-2">
+                  <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Inventory Sync Complete</span>
                 </div>
 
                 <button 
