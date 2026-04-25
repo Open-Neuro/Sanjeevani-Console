@@ -1521,181 +1521,151 @@ const ProductTable = () => {
         </div>
       )}
 
-      {/* Centered Add/Edit Product Modal */}
+      {/* Compact Right-side Add/Edit Product Drawer */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[4px] p-4">
-          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-[32px] bg-white shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-8 py-5">
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/30 backdrop-blur-[2px]">
+          <div className="flex h-full w-full max-w-xl flex-col bg-white shadow-[-20px_0_50px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-500 ease-out">
+            {/* Compact Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-6 py-4">
               <div>
-                <h2 className="text-2xl font-black text-[#0a2e2a] tracking-tight">
-                  {editingProductId ? 'Edit Medicine Info' : 'Add New Medicine (Alt+N)'}
+                <h2 className="text-lg font-black text-[#0a2e2a] tracking-tight">
+                  {editingProductId ? 'Edit Medicine' : 'Add New Medicine'}
                 </h2>
-                <p className="text-xs font-medium text-gray-500">Configure stock, pricing, and initial batch details</p>
+                <p className="text-[10px] font-medium text-gray-500 uppercase tracking-widest">Inventory Console</p>
               </div>
               <button onClick={closeProductDrawer} className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all">
-                <X size={22} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
-              <form onSubmit={saveProduct} className="space-y-8 pb-4">
-                {/* Section 1: Basic Info & Category */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+              <form onSubmit={saveProduct} className="space-y-6 pb-4">
+                {/* Section 1: Core Details */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="md:col-span-1">
-                    <div className="group relative flex aspect-square flex-col items-center justify-center overflow-hidden rounded-[24px] border-2 border-dashed border-gray-200 bg-gray-50 transition-all hover:border-emerald-400 hover:bg-emerald-50/30">
+                    <div className="group relative flex aspect-square flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-gray-100 bg-gray-50/50 transition-all hover:border-emerald-400 hover:bg-emerald-50/30">
                       {form.product_image_url ? (
                         <>
                           <img src={form.product_image_url} className="h-full w-full object-cover" alt="" />
                           <button 
                             type="button" 
                             onClick={() => setForm({ ...form, product_image_url: '' })}
-                            className="absolute top-2 right-2 rounded-full bg-white/90 p-1.5 text-rose-500 shadow-sm transition-all hover:scale-110 active:scale-95"
+                            className="absolute top-1 right-1 rounded-full bg-white/90 p-1 text-rose-500 shadow-sm"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={12} />
                           </button>
                         </>
                       ) : (
-                        <div className="flex flex-col items-center gap-2 p-4 text-center">
-                          <ImageIcon className="text-gray-300" size={32} />
-                          <span className="text-[10px] font-bold text-gray-400">No Image</span>
-                          <button 
-                            type="button"
-                            className="mt-2 rounded-full bg-white px-3 py-1 text-[10px] font-bold text-emerald-600 shadow-sm ring-1 ring-emerald-100 hover:bg-emerald-50"
-                            onClick={() => {
-                              const url = prompt('Enter Image URL:');
-                              if (url) setForm({ ...form, product_image_url: url });
-                            }}
-                          >
-                            Add URL
-                          </button>
+                        <div className="flex flex-col items-center gap-1 p-2 text-center">
+                          <ImageIcon className="text-gray-200" size={20} />
+                          <span className="text-[8px] font-bold text-gray-300">Image</span>
                         </div>
                       )}
                     </div>
                   </div>
 
-                  <div className="md:col-span-2 space-y-4">
+                  <div className="md:col-span-3 space-y-3">
                     <Field required label="Medicine Name" value={form.medicine_name} onChange={v => setForm({ ...form, medicine_name: v })} />
-                    <Field label="Generic Name (Salt)" value={form.generic_name} onChange={v => setForm({ ...form, generic_name: v })} />
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-3">
                       <SelectField label="Category" value={form.category} onChange={v => setForm({ ...form, category: v })} options={['Tablet', 'Syrup', 'Capsule', 'Injection', 'Cream', 'Drops', 'Other']} />
-                      <SelectField label="Base Packaging" value={form.packaging.base_uom} onChange={v => setForm({ ...form, packaging: { ...form.packaging, base_uom: v } })} options={['unit', 'strip', 'box', 'bottle', 'vial']} />
+                      <SelectField label="Base Unit" value={form.packaging.base_uom} onChange={v => setForm({ ...form, packaging: { ...form.packaging, base_uom: v } })} options={['unit', 'strip', 'box', 'bottle', 'vial']} />
                     </div>
                   </div>
                 </div>
 
-                {/* Section 2: Pricing & GST */}
-                <div className="rounded-[28px] bg-emerald-50/30 p-6 ring-1 ring-emerald-500/10">
-                  <div className="mb-4 flex items-center gap-2">
-                    <TrendingUp className="text-emerald-600" size={18} />
-                    <h3 className="text-sm font-black uppercase tracking-widest text-[#0a2e2a]">Pricing & Taxation</h3>
+                <Field label="Generic Name (Salt Composition)" value={form.generic_name} onChange={v => setForm({ ...form, generic_name: v })} />
+
+                {/* Section 2: Pricing (Compact Grid) */}
+                <div className="rounded-2xl bg-emerald-50/20 p-4 ring-1 ring-emerald-500/5">
+                  <div className="mb-3 flex items-center gap-2">
+                    <TrendingUp className="text-emerald-600" size={14} />
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-[#0a2e2a]">Pricing & Tax</h3>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Field type="number" required label="Buying Rate" value={String(form.purchase_price)} onChange={v => setForm({ ...form, purchase_price: Number(v) })} />
-                    <Field type="number" required label="Selling Price" value={String(form.selling_price)} onChange={v => setForm({ ...form, selling_price: Number(v) })} />
-                    <Field type="number" label="MRP" value={String(form.mrp)} onChange={v => setForm({ ...form, mrp: Number(v) })} />
+                  <div className="grid grid-cols-3 gap-3">
+                    <Field type="number" required label="Buy Rate" value={String(form.purchase_price)} onChange={v => setForm({ ...form, purchase_price: Number(v) })} />
+                    <Field type="number" required label="Sell Price" value={String(form.selling_price)} onChange={v => setForm({ ...form, selling_price: Number(v) })} />
                     <SelectField label="GST %" value={String(form.gst_percentage)} onChange={v => setForm({ ...form, gst_percentage: Number(v) })} options={['0', '5', '12', '18', '28']} />
                   </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-emerald-100 pt-4">
-                    <div className="flex flex-col">
-                      <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-tighter">Profit Margin</span>
-                      <span className="text-sm font-black text-emerald-900">
-                        {form.selling_price > 0 ? (((form.selling_price - form.purchase_price) / form.selling_price) * 100).toFixed(1) : 0}%
-                      </span>
+                </div>
+
+                {/* Section 3: Smart Packing (Optimized) */}
+                <div className="rounded-2xl border border-gray-100 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Package className="text-blue-600" size={14} />
+                      <h3 className="text-[10px] font-black uppercase tracking-widest text-[#0a2e2a]">Pack Configuration</h3>
                     </div>
-                    <div className="flex flex-col">
-                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">GST Breakdown</span>
-                      <span className="text-[11px] font-medium text-gray-600">
-                        CGST: {(form.gst_percentage / 2)}% | SGST: {(form.gst_percentage / 2)}%
-                      </span>
+                    <div className="rounded-md bg-[#0a2e2a] px-2 py-0.5 text-[9px] font-bold text-[#bbed3b]">
+                      Total: {form.packaging.base_uom === 'unit' ? 1 : 
+                        form.packaging.base_uom === 'strip' ? (form.packaging.levels.find(l => l.level === 'strip')?.to_base_units || 1) :
+                        (form.packaging.levels.find(l => l.level === 'strip')?.to_base_units || 1) * (form.packaging.levels.find(l => l.level === 'box')?.to_base_units || 1)} Units
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {(form.packaging.base_uom === 'strip' || form.packaging.base_uom === 'box' || form.packaging.base_uom === 'bottle' || form.packaging.base_uom === 'vial') && (
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold uppercase text-gray-400">Units per {form.packaging.base_uom === 'bottle' || form.packaging.base_uom === 'vial' ? 'Bottle' : 'Strip'}</label>
+                        <input 
+                          type="number" 
+                          value={form.packaging.levels.find(l => l.level === 'strip')?.to_base_units || 1}
+                          onChange={(e) => updateLevel(form, setForm, 'strip', e.target.value)}
+                          className="w-full rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/10"
+                        />
+                      </div>
+                    )}
+                    {form.packaging.base_uom === 'box' && (
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold uppercase text-gray-400">Strips/Bottles per Box</label>
+                        <input 
+                          type="number" 
+                          value={form.packaging.levels.find(l => l.level === 'box')?.to_base_units || 1}
+                          onChange={(e) => updateLevel(form, setForm, 'box', e.target.value)}
+                          className="w-full rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/10"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Section 3: Pack Size Configuration */}
-                <div className="rounded-[28px] border border-gray-100 bg-white p-6">
-                  <div className="mb-4 flex items-center gap-2">
-                    <Package className="text-blue-600" size={18} />
-                    <h3 className="text-sm font-black uppercase tracking-widest text-[#0a2e2a]">Pack Size Breakdown</h3>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400">Units per Strip</label>
-                      <input 
-                        type="number" 
-                        value={form.packaging.levels.find(l => l.level === 'strip')?.to_base_units || 1}
-                        onChange={(e) => updateLevel(form, setForm, 'strip', e.target.value)}
-                        className="w-full rounded-xl border border-gray-100 bg-gray-50 px-4 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400">Strips per Box</label>
-                      <input 
-                        type="number" 
-                        value={form.packaging.levels.find(l => l.level === 'box')?.to_base_units || 1}
-                        onChange={(e) => updateLevel(form, setForm, 'box', e.target.value)}
-                        className="w-full rounded-xl border border-gray-100 bg-gray-50 px-4 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
-                      />
-                    </div>
-                    <div className="flex flex-col justify-center rounded-xl bg-blue-50/50 p-3 text-center">
-                      <span className="text-[8px] font-bold uppercase text-blue-600">Total Units/Box</span>
-                      <span className="text-lg font-black text-blue-900">
-                        {(form.packaging.levels.find(l => l.level === 'strip')?.to_base_units || 1) * (form.packaging.levels.find(l => l.level === 'box')?.to_base_units || 1)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 4: Initial Batch Details (Only for New Products) */}
+                {/* Section 4: Batch & Stock (Compact) */}
                 {!editingProductId && (
-                  <div className="rounded-[28px] bg-gray-50/80 p-6 ring-1 ring-gray-200/50">
-                    <div className="mb-4 flex items-center gap-2">
-                      <Clock className="text-gray-600" size={18} />
-                      <h3 className="text-sm font-black uppercase tracking-widest text-[#0a2e2a]">Initial Batch & Stock</h3>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      <Field label="Batch Number" value={form.batch_no} onChange={v => setForm({ ...form, batch_no: v })} />
-                      <Field type="date" label="Expiry Date" value={form.expiry_date} onChange={v => setForm({ ...form, expiry_date: v })} />
-                      <Field type="number" label="Initial Stock Qty" value={String(form.stock)} onChange={v => setForm({ ...form, stock: Number(v) })} />
-                    </div>
+                  <div className="grid grid-cols-3 gap-3 rounded-2xl bg-gray-50 p-4">
+                    <Field label="Batch ID" value={form.batch_no} onChange={v => setForm({ ...form, batch_no: v })} />
+                    <Field type="date" label="Expiry" value={form.expiry_date} onChange={v => setForm({ ...form, expiry_date: v })} />
+                    <Field type="number" label="Initial Qty" value={String(form.stock)} onChange={v => setForm({ ...form, stock: Number(v) })} />
                   </div>
                 )}
 
-                {/* Section 4: Regulatory & Storage */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="text-rose-600" size={18} />
-                      <h3 className="text-sm font-black uppercase tracking-widest text-[#0a2e2a]">Regulatory</h3>
-                    </div>
-                    <div className="flex flex-wrap gap-4">
-                      <label className="flex items-center gap-2 cursor-pointer group">
-                        <input type="checkbox" checked={form.is_schedule_h} onChange={e => setForm({ ...form, is_schedule_h: e.target.checked })} className="h-4 w-4 rounded-md border-gray-300 text-rose-600" />
-                        <span className="text-xs font-bold text-gray-600">Schedule H</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer group">
-                        <input type="checkbox" checked={form.is_schedule_h1} onChange={e => setForm({ ...form, is_schedule_h1: e.target.checked })} className="h-4 w-4 rounded-md border-gray-300 text-rose-600" />
-                        <span className="text-xs font-bold text-gray-600">Schedule H1</span>
-                      </label>
-                    </div>
+                {/* Section 5: Misc */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <h3 className="text-[9px] font-black uppercase tracking-widest text-gray-400">Storage</h3>
+                    <Field label="Rack Location" value={form.location_rack} onChange={v => setForm({ ...form, location_rack: v })} />
                   </div>
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <Package className="text-emerald-600" size={18} />
-                      <h3 className="text-sm font-black uppercase tracking-widest text-[#0a2e2a]">Storage</h3>
+                  <div className="space-y-2">
+                    <h3 className="text-[9px] font-black uppercase tracking-widest text-gray-400">Regulatory</h3>
+                    <div className="flex gap-4 pt-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={form.is_schedule_h} onChange={e => setForm({ ...form, is_schedule_h: e.target.checked })} className="h-3.5 w-3.5 rounded border-gray-300 text-rose-600" />
+                        <span className="text-[10px] font-bold text-gray-600">Sch H</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={form.is_schedule_h1} onChange={e => setForm({ ...form, is_schedule_h1: e.target.checked })} className="h-3.5 w-3.5 rounded border-gray-300 text-rose-600" />
+                        <span className="text-[10px] font-bold text-gray-600">Sch H1</span>
+                      </label>
                     </div>
-                    <Field label="Rack / Location" value={form.location_rack} onChange={v => setForm({ ...form, location_rack: v })} />
                   </div>
                 </div>
               </form>
             </div>
 
-            <div className="flex gap-4 border-t border-gray-100 bg-gray-50/30 p-8">
-              <button type="button" onClick={closeProductDrawer} className="flex-1 rounded-2xl border border-gray-200 py-4 text-sm font-bold text-gray-500 hover:bg-gray-100">
+            <div className="flex gap-3 border-t border-gray-100 bg-gray-50/50 p-6">
+              <button onClick={closeProductDrawer} className="flex-1 rounded-xl border border-gray-200 py-3 text-xs font-bold text-gray-500 hover:bg-white">
                 Cancel
               </button>
-              <button onClick={(e) => { e.preventDefault(); saveProduct(e as any); }} disabled={saving} className="flex-[2] rounded-2xl bg-[#0a2e2a] py-4 text-sm font-black text-[#bbed3b] shadow-xl shadow-emerald-900/10 hover:bg-[#0f423d] active:scale-95 transition-all">
-                {saving ? <Loader2 className="mx-auto animate-spin" size={20} /> : editingProductId ? 'Update Medicine' : 'Add Product & Batch'}
+              <button onClick={(e) => { e.preventDefault(); saveProduct(e as any); }} disabled={saving} className="flex-[1.5] rounded-xl bg-[#0a2e2a] py-3 text-xs font-black text-[#bbed3b] transition-all hover:bg-[#0f423d] active:scale-95 shadow-lg shadow-emerald-900/10">
+                {saving ? <Loader2 className="mx-auto animate-spin" size={16} /> : editingProductId ? 'Update' : 'Save Medicine'}
               </button>
             </div>
           </div>
