@@ -99,7 +99,7 @@ type ProductForm = {
   category: string;
   stock: number;
   batch_no: string;
-  expiry_month_year: string; // MM/YYYY
+  expiry_date: string; // YYYY-MM-DD
   selling_price: number;
   purchase_price: number;
   mrp: number;
@@ -147,7 +147,7 @@ const emptyForm = (): ProductForm => ({
   category: 'General',
   stock: 0,
   batch_no: '',
-  expiry_month_year: '',
+  expiry_date: '',
   selling_price: 0,
   purchase_price: 0,
   mrp: 0,
@@ -166,22 +166,28 @@ const emptyForm = (): ProductForm => ({
 });
 
 // --- Date helpers ---
-const toMonthYear = (dateStr?: string): string => {
+const formatDate = (dateStr?: string): string => {
   if (!dateStr) return '';
-  const m = dateStr.match(/^(\d{4})-(\d{2})-\d{2}$/);
-  if (m) return `${m[2]}/${m[1]}`;
-  if (/^\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
-  return '';
+  // If it's already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  // If it's DD/MM/YYYY
+  const m = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  // If it's MM/YYYY
+  const my = dateStr.match(/^(\d{2})\/(\d{4})$/);
+  if (my) {
+    const lastDay = new Date(Number(my[2]), Number(my[1]), 0).getDate();
+    return `${my[2]}-${my[1]}-${String(lastDay).padStart(2, '0')}`;
+  }
+  return dateStr;
 };
-const fromMonthYear = (my: string): string => {
-  if (!my) return '';
-  const m = my.match(/^(\d{2})\/(\d{4})$/);
-  if (!m) return my;
-  const mo = parseInt(m[1]), yr = parseInt(m[2]);
-  const last = new Date(yr, mo, 0).getDate();
-  return `${yr}-${String(mo).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+
+const displayExpiry = (d?: string) => {
+  if (!d || d === '-') return '-';
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`; // Display as DD/MM/YYYY
+  return d;
 };
-const displayExpiry = (d?: string) => toMonthYear(d) || d || '-';
 
 // --- CSV parser ---
 const parseCSV = (text: string): ImportRow[] => {
@@ -233,7 +239,7 @@ const ProductTable = () => {
   const [batchDialogProduct, setBatchDialogProduct] = useState<ProductRow | null>(null);
   const [batchForm, setBatchForm] = useState({
     batch_no: '',
-    expiry_month_year: '',
+    expiry_date: '',
     quantity: 0,
     supplier_name: '',
     purchase_rate_per_base: '',
@@ -406,16 +412,16 @@ const ProductTable = () => {
     setOcrError(null);
   };
 
-  const loadProducts = async () => {
-    setLoading(true);
+  const loadProducts = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
-      const res = await fetchProducts(1, 1000, ''); // Fetch all initially for local filtering
+      const res = await fetchProducts(1, 1000, '');
       setProducts((res.data || []) as ProductRow[]);
     } catch (error) {
       console.error(error);
       setProducts([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -427,9 +433,9 @@ const ProductTable = () => {
     return products.map((p, index) => {
       const id = getRowKey(p, index);
       const batches = getBatchList(p, id);
-      const stock = batches.length > 0
-        ? batches.reduce((sum, b) => sum + Number(b.availableBaseUnits || 0), 0)
-        : Number(p.stock_summary?.available_base_units ?? p['Current Stock'] ?? p.stock ?? p.Stock ?? 0);
+      const mainStock = Number(p.stock_summary?.available_base_units ?? p['Current Stock'] ?? p.stock ?? p.Stock ?? 0);
+      const batchStock = batches.reduce((sum, b) => sum + Number(b.availableBaseUnits || 0), 0);
+      const stock = Math.max(mainStock, batchStock);
 
       const availableBatches = batches.filter(b => b.availableBaseUnits > 0);
       const displayPrice = availableBatches.length > 0
@@ -480,10 +486,10 @@ const ProductTable = () => {
         const barcodes = (p.barcodes || []).map(b => b.code.toLowerCase());
 
         // Check if every search term matches at least one field
-        return searchTerms.every(term => 
-          title.includes(term) || 
-          generic.includes(term) || 
-          brand.includes(term) || 
+        return searchTerms.every(term =>
+          title.includes(term) ||
+          generic.includes(term) ||
+          brand.includes(term) ||
           manufacturer.includes(term) ||
           category.includes(term) ||
           batch.includes(term) ||
@@ -533,7 +539,7 @@ const ProductTable = () => {
     setBatchDialogProductId(productId);
     setBatchForm({
       batch_no: '',
-      expiry_month_year: '',
+      expiry_date: formatDate(product.expiry_date || product['Expiry Date']),
       quantity: 0,
       supplier_name: resolveCompany(product) || '',
       purchase_rate_per_base: '',
@@ -652,7 +658,7 @@ const ProductTable = () => {
         category: product.category || product.Category || 'General',
         stock: Number(product.stock_summary?.available_base_units ?? product['Current Stock'] ?? 0),
         batch_no: product.batch_no || product['Batch Number'] || '',
-        expiry_month_year: toMonthYear(product.expiry_date || product['Expiry Date']),
+        expiry_date: formatDate(product.expiry_date || product['Expiry Date']),
         selling_price: Number(product.selling_price ?? product['Selling Price'] ?? 0),
         purchase_price: Number(product.purchase_price ?? product['Purchase Price'] ?? 0),
         mrp: Number(product.mrp ?? product['MRP'] ?? 0),
@@ -697,7 +703,7 @@ const ProductTable = () => {
         category: form.category,
         stock: form.stock,
         batch_no: form.batch_no,
-        expiry_date: fromMonthYear(form.expiry_month_year),
+        expiry_date: form.expiry_date,
         selling_price: form.selling_price,
         purchase_price: form.purchase_price,
         mrp: form.mrp,
@@ -740,7 +746,7 @@ const ProductTable = () => {
           {
             product_id: batchDialogProductId,
             batch_no: batchForm.batch_no.trim() || undefined,
-            expiry_date: fromMonthYear(batchForm.expiry_month_year) || undefined,
+            expiry_date: batchForm.expiry_date || undefined,
             qty: { unit: Number(batchForm.quantity) || 0, strip: 0, box: 0 },
             supplier_name: batchForm.supplier_name.trim() || undefined,
             purchase_rate_per_base: batchForm.purchase_rate_per_base ? Number(batchForm.purchase_rate_per_base) : undefined,
@@ -816,11 +822,11 @@ const ProductTable = () => {
         })),
       };
       await applyStockActions(payload, `bill-${Date.now()}`);
+      setMessage(`Bill created successfully!`);
+      setCartOpen(false);
       setSelected({});
       setQtyDrafts({});
-      setCartOpen(false);
-      setMessage('Bill created successfully');
-      await loadProducts();
+      await loadProducts(true); // Silent reload
     } catch (error) {
       console.error(error);
       setMessage(error instanceof Error ? error.message : 'Could not create bill');
@@ -954,7 +960,7 @@ const ProductTable = () => {
                 Try searching by salt name, brand, or barcode.
               </p>
               {search && (
-                <button 
+                <button
                   onClick={() => setSearch('')}
                   className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-xs font-bold text-emerald-700 shadow-sm ring-1 ring-emerald-200 transition-all hover:bg-emerald-50 active:scale-95"
                 >
@@ -1483,7 +1489,7 @@ const ProductTable = () => {
                 </div>
 
                 <Field label="Barcode / QR" value={form.barcode} onChange={v => setForm({ ...form, barcode: v })} />
-                <MonthYearField label="Default Expiry" value={form.expiry_month_year} onChange={v => setForm({ ...form, expiry_month_year: v })} />
+                <Field type="date" label="Expiry Date" value={form.expiry_date} onChange={v => setForm({ ...form, expiry_date: v })} />
                 <div className="md:col-span-2">
                   <Field label="Product Image URL" value={form.product_image_url} onChange={v => setForm({ ...form, product_image_url: v })} />
                 </div>
@@ -1509,7 +1515,7 @@ const ProductTable = () => {
             </div>
             <form onSubmit={saveBatch} className="space-y-4">
               <Field required label="Batch Number" value={batchForm.batch_no} onChange={v => setBatchForm({ ...batchForm, batch_no: v })} />
-              <MonthYearField required label="Expiry Date" value={batchForm.expiry_month_year} onChange={v => setBatchForm({ ...batchForm, expiry_month_year: v })} />
+              <Field type="date" required label="Expiry Date" value={batchForm.expiry_date} onChange={v => setBatchForm({ ...batchForm, expiry_date: v })} />
               <Field type="number" required label="Quantity" value={String(batchForm.quantity)} onChange={v => setBatchForm({ ...batchForm, quantity: Number(v) })} />
               <div className="grid grid-cols-2 gap-4">
                 <Field type="number" label="Buying Price" value={String(batchForm.purchase_rate_per_base)} onChange={v => setBatchForm({ ...batchForm, purchase_rate_per_base: v })} />
@@ -1627,47 +1633,6 @@ const SelectField = ({
   </label>
 );
 
-const MonthYearField = ({
-  label,
-  value,
-  onChange,
-  required = false,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  required?: boolean;
-}) => {
-  const parts = value ? value.split('/') : ['', ''];
-  const month = parts[0] || '';
-  const year = parts[1] || '';
-  const MONTHS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
-  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return (
-    <label className="block">
-      <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">{label}</span>
-      <div className="flex gap-2">
-        <select
-          value={month}
-          required={required}
-          onChange={e => onChange(`${e.target.value}/${year}`)}
-          className="flex-1 rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm outline-none transition focus:ring-2 focus:ring-[#bbed3b]"
-        >
-          <option value="">Month</option>
-          {MONTHS.map((m, i) => <option key={m} value={m}>{MONTH_NAMES[i]}</option>)}
-        </select>
-        <input
-          type="number"
-          placeholder="YYYY"
-          value={year}
-          min={2020}
-          max={2040}
-          onChange={e => onChange(`${month}/${e.target.value}`)}
-          className="w-24 rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm outline-none transition focus:ring-2 focus:ring-[#bbed3b]"
-        />
-      </div>
-    </label>
-  );
-};
+
 
 export default ProductTable;
