@@ -60,6 +60,8 @@ type ProductRow = {
   packaging?: { base_uom?: string; levels?: { level: string; to_base_units: number; label?: string }[] };
   stock_summary?: { available_base_units?: number; breakdown?: PackBreakdown };
   stock_breakdown?: PackBreakdown;
+  stock?: number;
+  "Stock"?: number;
   batch_no?: string;
   expiry_date?: string;
   selling_price?: number;
@@ -177,7 +179,7 @@ const fromMonthYear = (my: string): string => {
   if (!m) return my;
   const mo = parseInt(m[1]), yr = parseInt(m[2]);
   const last = new Date(yr, mo, 0).getDate();
-  return `${yr}-${String(mo).padStart(2,'0')}-${String(last).padStart(2,'0')}`;
+  return `${yr}-${String(mo).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
 };
 const displayExpiry = (d?: string) => toMonthYear(d) || d || '-';
 
@@ -276,7 +278,7 @@ const ProductTable = () => {
   const normalizeBatch = (batch: Record<string, any>, index = 0): NormalizedBatch => {
     const batchNo = String(batch.batch_no || batch.batch_number || batch['Batch Number'] || batch.batch || '').trim();
     const expiryDate = String(batch.expiry_date || batch['Expiry Date'] || batch.expiry || '').trim();
-    const availableBaseUnits = Number(batch.available_base_units ?? batch['Current Stock'] ?? batch.stock ?? 0);
+    const availableBaseUnits = Number(batch.available_base_units ?? batch['Current Stock'] ?? batch.stock ?? batch.Stock ?? 0);
     const purchasePrice = Number(batch.purchase_rate_per_base ?? batch.purchase_price ?? batch['Purchase Price'] ?? 0);
     const sellingPrice = Number(batch.selling_price ?? batch['Selling Price'] ?? batch.mrp_per_base ?? batch.mrp ?? batch['MRP'] ?? 0);
     const supplierName = String(batch.supplier_name || batch['Supplier Name'] || '').trim();
@@ -316,7 +318,7 @@ const ProductTable = () => {
     if (batches.length > 0) {
       return batches.reduce((sum, batch) => sum + Number(batch.availableBaseUnits || 0), 0);
     }
-    return Number(p.stock_summary?.available_base_units ?? p['Current Stock'] ?? 0);
+    return Number(p.stock_summary?.available_base_units ?? p['Current Stock'] ?? p.stock ?? p.Stock ?? 0);
   };
   const resolvePrice = (p: ProductRow, productId = '') => {
     if (productId) {
@@ -425,17 +427,17 @@ const ProductTable = () => {
     return products.map((p, index) => {
       const id = getRowKey(p, index);
       const batches = getBatchList(p, id);
-      const stock = batches.length > 0 
+      const stock = batches.length > 0
         ? batches.reduce((sum, b) => sum + Number(b.availableBaseUnits || 0), 0)
-        : Number(p.stock_summary?.available_base_units ?? p['Current Stock'] ?? 0);
-      
+        : Number(p.stock_summary?.available_base_units ?? p['Current Stock'] ?? p.stock ?? p.Stock ?? 0);
+
       const availableBatches = batches.filter(b => b.availableBaseUnits > 0);
-      const displayPrice = availableBatches.length > 0 
-        ? availableBatches[0].sellingPrice 
+      const displayPrice = availableBatches.length > 0
+        ? availableBatches[0].sellingPrice
         : Number(p.selling_price ?? p['Selling Price'] ?? p.unit_price ?? p['Unit Price'] ?? p.mrp ?? p['MRP'] ?? 0);
-      
-      const purchasePrice = availableBatches.length > 0 
-        ? availableBatches[0].purchasePrice 
+
+      const purchasePrice = availableBatches.length > 0
+        ? availableBatches[0].purchasePrice
         : Number(p.purchase_price ?? p['Purchase Price'] ?? 0);
 
       const earliestExpiry = availableBatches[0]?.expiryDate || p.expiry_date || p['Expiry Date'] || '-';
@@ -456,21 +458,39 @@ const ProductTable = () => {
   }, [products, batchesByProduct, getBatchList]);
 
   const filteredProducts = useMemo(() => {
+    // Smart search: split by whitespace and match all terms
+    const searchTerms = search.toLowerCase().trim().split(/\s+/).filter(t => t.length > 0);
+
     let next = processedProducts.filter((p) => {
-      // Local search filtering
-      if (search) {
-        const s = search.toLowerCase();
-        const title = resolveMedicineTitle(p).toLowerCase();
-        const generic = (p.generic_name || p['Generic Name'] || '').toLowerCase();
-        const barcode = (p.barcodes?.[0]?.code || '').toLowerCase();
-        const brand = (p.brand_name || p['Brand Name'] || '').toLowerCase();
-        if (!title.includes(s) && !generic.includes(s) && !barcode.includes(s) && !brand.includes(s)) return false;
+      // Apply filters first (Low Stock / Expiry)
+      if (filter === 'low') {
+        if (!(p.computedStock > 0 && p.computedStock < 20)) return false;
+      } else if (filter === 'expiry') {
+        if (!(p.computedExpiryDays !== null && p.computedExpiryDays >= 0 && p.computedExpiryDays <= 90)) return false;
       }
 
-      if (filter === 'low') return p.computedStock > 0 && p.computedStock < 20;
-      if (filter === 'expiry') {
-        return p.computedExpiryDays !== null && p.computedExpiryDays >= 0 && p.computedExpiryDays <= 90;
+      // Smart Search Logic
+      if (searchTerms.length > 0) {
+        const title = resolveMedicineTitle(p).toLowerCase();
+        const generic = (p.generic_name || p['Generic Name'] || '').toLowerCase();
+        const brand = (p.brand_name || p['Brand Name'] || '').toLowerCase();
+        const manufacturer = (p.manufacturer || p['Manufacturer'] || '').toLowerCase();
+        const category = (p.category || p['Category'] || '').toLowerCase();
+        const batch = (p.batch_no || p['Batch Number'] || '').toLowerCase();
+        const barcodes = (p.barcodes || []).map(b => b.code.toLowerCase());
+
+        // Check if every search term matches at least one field
+        return searchTerms.every(term => 
+          title.includes(term) || 
+          generic.includes(term) || 
+          brand.includes(term) || 
+          manufacturer.includes(term) ||
+          category.includes(term) ||
+          batch.includes(term) ||
+          barcodes.some(bc => bc.includes(term))
+        );
       }
+
       return true;
     });
 
@@ -478,7 +498,7 @@ const ProductTable = () => {
       next = [...next].sort((a, b) => (a.computedExpiryDays ?? 9999) - (b.computedExpiryDays ?? 9999));
     }
     return next;
-  }, [processedProducts, filter]);
+  }, [processedProducts, filter, search]);
 
   const selectedItems = Object.values(selected);
   const selectedCount = selectedItems.length;
@@ -658,7 +678,7 @@ const ProductTable = () => {
 
   const saveProduct = async (event: FormEvent) => {
     event.preventDefault();
-    
+
     if (!editingProductId && products.some(p => resolveMedicineTitle(p).trim().toLowerCase() === form.medicine_name.trim().toLowerCase())) {
       setMessage(`Medicine "${form.medicine_name}" already exists in the system.`);
       setSaving(false);
@@ -755,7 +775,7 @@ const ProductTable = () => {
     try {
       const preview = await bulkImportPreview(rows.map(r => ({ medicine_name: r.medicine_name, category: r.category, generic_name: r.generic_name, brand_name: r.brand_name, supplier_name: r.supplier_name, stock: r.stock, expiry_date: r.expiry_date, mrp: r.mrp, selling_price: r.selling_price, purchase_price: r.purchase_price, schedule: r.schedule, batch_no: r.batch_no })));
       const dupes = (preview.duplicates || []).map((d: any) => d.medicine_name);
-      const tagged = rows.map(r => ({ ...r, resolution: (dupes.includes(r.medicine_name) ? 'skip' : 'new') as 'new'|'skip'|'new_batch' }));
+      const tagged = rows.map(r => ({ ...r, resolution: (dupes.includes(r.medicine_name) ? 'skip' : 'new') as 'new' | 'skip' | 'new_batch' }));
       setImportRows(tagged);
       setImportDialogOpen(true);
     } catch { setMessage('Could not preview import'); } finally { setImportPreviewing(false); }
@@ -768,7 +788,7 @@ const ProductTable = () => {
     setImportSaving(true);
     try {
       const res = await bulkAddProducts(toAdd.map(r => ({ medicine_name: r.medicine_name, category: r.category, generic_name: r.generic_name, brand_name: r.brand_name, supplier_name: r.supplier_name, stock: r.stock, expiry_date: r.expiry_date, mrp: r.mrp, selling_price: r.selling_price, purchase_price: r.purchase_price, schedule: r.schedule, batch_no: r.batch_no })));
-      setMessage(`Import done: ${res.added} added, ${(res.skipped||[]).length} skipped.`);
+      setMessage(`Import done: ${res.added} added, ${(res.skipped || []).length} skipped.`);
       setImportDialogOpen(false);
       setImportRows([]);
       await loadProducts();
@@ -858,11 +878,10 @@ const ProductTable = () => {
               <button
                 key={item.key}
                 onClick={() => setFilter(item.key as typeof filter)}
-                className={`rounded-full px-3.5 py-2 text-xs font-semibold tracking-wide transition ${
-                  filter === item.key
-                    ? 'bg-[#0a2e2a] text-white shadow-sm'
-                    : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-                }`}
+                className={`rounded-full px-3.5 py-2 text-xs font-semibold tracking-wide transition ${filter === item.key
+                  ? 'bg-[#0a2e2a] text-white shadow-sm'
+                  : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
               >
                 {item.label}
               </button>
@@ -880,7 +899,7 @@ const ProductTable = () => {
               className="w-full rounded-[20px] border border-gray-200 bg-white py-3.5 pl-11 pr-12 text-[15px] text-gray-900 shadow-[0_2px_4px_rgba(0,0,0,0.02)] outline-none transition-all placeholder:text-gray-400 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
             />
             {search && (
-              <button 
+              <button
                 onClick={() => setSearch('')}
                 className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 active:scale-90"
               >
@@ -924,10 +943,24 @@ const ProductTable = () => {
               <Loader2 className="animate-spin" size={22} />
             </div>
           ) : filteredProducts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-[24px] border border-dashed border-gray-200 bg-gray-50 py-16 text-center">
-            <Package size={34} className="text-gray-300" />
-              <p className="mt-3 text-sm font-medium text-gray-500">No products match this view</p>
-              <p className="mt-1 max-w-sm text-sm text-gray-400">Try a different search or add the first medicine to start your catalog.</p>
+            <div className="flex flex-col items-center justify-center rounded-[32px] border border-dashed border-emerald-100 bg-emerald-50/20 py-20 text-center px-6">
+              <div className="relative mb-4">
+                <Package size={42} className="text-emerald-200" />
+                <Search size={20} className="absolute -bottom-1 -right-1 text-emerald-500" />
+              </div>
+              <h4 className="text-lg font-bold text-[#0a2e2a]">No medicines found</h4>
+              <p className="mt-2 max-w-xs text-sm text-gray-500 leading-relaxed">
+                We couldn't find anything matching "<span className="font-semibold text-emerald-700">{search}</span>".
+                Try searching by salt name, brand, or barcode.
+              </p>
+              {search && (
+                <button 
+                  onClick={() => setSearch('')}
+                  className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-xs font-bold text-emerald-700 shadow-sm ring-1 ring-emerald-200 transition-all hover:bg-emerald-50 active:scale-95"
+                >
+                  <X size={14} /> Clear Search
+                </button>
+              )}
             </div>
           ) : (
             filteredProducts.map((product) => {
@@ -940,17 +973,16 @@ const ProductTable = () => {
               const expiryBadge = getExpiryBadge(expiryDays);
               const batchLabel = product.batch_no || product['Batch Number'] ? `Batch ${product.batch_no || product['Batch Number']}` : '+ Add Batch';
               return (
-                <article 
-                  key={id} 
+                <article
+                  key={id}
                   onClick={(e) => {
                     if ((e.target as HTMLElement).closest('button, input, select')) return;
                     addBillItem(product, id);
                   }}
-                  className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 px-3 py-3 cursor-pointer ${
-                    selected[id] 
-                      ? 'border-emerald-600 bg-emerald-50/50 shadow-[0_8px_30px_rgba(5,150,105,0.15)] ring-1 ring-emerald-600/20' 
-                      : 'border-gray-100 bg-white hover:border-emerald-200 hover:shadow-md active:border-emerald-300'
-                  }`}
+                  className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 px-3 py-3 cursor-pointer ${selected[id]
+                    ? 'border-emerald-600 bg-emerald-50/50 shadow-[0_8px_30px_rgba(5,150,105,0.15)] ring-1 ring-emerald-600/20'
+                    : 'border-gray-100 bg-white hover:border-emerald-200 hover:shadow-md active:border-emerald-300'
+                    }`}
                 >
                   {selected[id] && (
                     <div className="absolute right-0 top-0 h-16 w-16 overflow-hidden">
@@ -960,18 +992,29 @@ const ProductTable = () => {
                     </div>
                   )}
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="flex items-start gap-3">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); addBillItem(product, id); }}
-                        className={`mt-1 grid h-8 w-8 place-items-center rounded-xl border transition-all active:scale-90 ${
-                          selected[id]
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                            : 'border-gray-200 bg-white text-gray-400'
-                        }`}
-                        aria-label="Add to bill"
-                      >
-                        {selected[id] ? <Check size={16} /> : <Plus size={16} />}
-                      </button>
+                    <div className="flex items-start gap-4">
+                      <div className="relative shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); addBillItem(product, id); }}
+                          className={`group/img overflow-hidden relative grid h-[60px] w-[60px] place-items-center rounded-2xl border transition-all active:scale-95 ${selected[id]
+                            ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/20 shadow-inner'
+                            : 'border-gray-200 bg-gray-50 hover:border-emerald-200 hover:bg-white'
+                            }`}
+                        >
+                          {(product as any).product_image_url ? (
+                            <img
+                              src={(product as any).product_image_url}
+                              alt=""
+                              className={`h-full w-full object-cover transition-transform duration-500 group-hover/img:scale-110 ${selected[id] ? 'opacity-40' : ''}`}
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center gap-1 text-gray-300 transition-colors group-hover/img:text-emerald-400">
+                              <Package size={24} strokeWidth={1.5} />
+                              <span className="text-[8px] font-black uppercase tracking-tighter">No Image</span>
+                            </div>
+                          )}
+                        </button>
+                      </div>
 
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -993,11 +1036,10 @@ const ProductTable = () => {
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); openBatchDialog(product, id); }}
-                            className={`group flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold tracking-tight transition-all active:scale-95 ${
-                              product.batch_no || product['Batch Number']
-                                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                : 'bg-rose-50 text-rose-600 hover:bg-rose-100 ring-1 ring-rose-200/50'
-                            }`}
+                            className={`group flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold tracking-tight transition-all active:scale-95 ${product.batch_no || product['Batch Number']
+                              ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              : 'bg-rose-50 text-rose-600 hover:bg-rose-100 ring-1 ring-rose-200/50'
+                              }`}
                           >
                             {batchLabel}
                           </button>
@@ -1014,7 +1056,7 @@ const ProductTable = () => {
                                 {expiryBadge.label}
                               </span>
                             )}
-                            
+
                             {stock < 20 && stock > 0 && (
                               <span className="flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 font-bold text-orange-700 ring-1 ring-orange-200">
                                 <TrendingUp size={12} className="rotate-180" />
@@ -1069,9 +1111,8 @@ const ProductTable = () => {
 
                       <button
                         onClick={(e) => { e.stopPropagation(); addBillItem(product, id); }}
-                        className={`grid h-9 w-9 place-items-center rounded-full transition-all active:scale-90 ${
-                          selected[id] ? 'bg-emerald-600 text-white shadow-md' : 'bg-[#0a2e2a] text-[#bbed3b] hover:bg-[#0f423d]'
-                        }`}
+                        className={`grid h-9 w-9 place-items-center rounded-full transition-all active:scale-90 ${selected[id] ? 'bg-emerald-600 text-white shadow-md' : 'bg-[#0a2e2a] text-[#bbed3b] hover:bg-[#0f423d]'
+                          }`}
                         title={selected[id] ? 'Added to bill' : 'Add to bill'}
                       >
                         {selected[id] ? <Check size={14} /> : <Plus size={14} />}
@@ -1178,33 +1219,33 @@ const ProductTable = () => {
                                 batchItem.expiryDate ? Math.ceil((new Date(batchItem.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null,
                               );
                               return (
-                              <div key={`${batchItem.key}-${batchIndex}`} className="rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm transition hover:border-gray-200">
-                                <div className="grid grid-cols-2 gap-y-2 text-[11px] md:grid-cols-4 md:gap-x-4 md:gap-y-0">
-                                  <div className="flex flex-col">
-                                    <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Batch No</span>
-                                    <span className="font-bold text-gray-900">{batchItem.batchNo}</span>
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Expiry</span>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="font-semibold text-gray-700">{batchItem.expiryDate || '-'}</span>
-                                      {batchBadge ? <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-tight ${batchBadge.className}`}>{batchBadge.label}</span> : null}
+                                <div key={`${batchItem.key}-${batchIndex}`} className="rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm transition hover:border-gray-200">
+                                  <div className="grid grid-cols-2 gap-y-2 text-[11px] md:grid-cols-4 md:gap-x-4 md:gap-y-0">
+                                    <div className="flex flex-col">
+                                      <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Batch No</span>
+                                      <span className="font-bold text-gray-900">{batchItem.batchNo}</span>
                                     </div>
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Stock</span>
-                                    <span className="font-semibold text-emerald-700">{formatPackAmount(batchItem.availableBaseUnits, product)}</span>
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Pricing</span>
-                                    <div className="flex items-center gap-1">
-                                      <span className="font-medium text-gray-500 line-through">₹{batchItem.purchasePrice.toFixed(1)}</span>
-                                      <span className="font-bold text-gray-900">₹{batchItem.sellingPrice.toFixed(1)}</span>
+                                    <div className="flex flex-col">
+                                      <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Expiry</span>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-semibold text-gray-700">{batchItem.expiryDate || '-'}</span>
+                                        {batchBadge ? <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-tight ${batchBadge.className}`}>{batchBadge.label}</span> : null}
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Stock</span>
+                                      <span className="font-semibold text-emerald-700">{formatPackAmount(batchItem.availableBaseUnits, product)}</span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Pricing</span>
+                                      <div className="flex items-center gap-1">
+                                        <span className="font-medium text-gray-500 line-through">₹{batchItem.purchasePrice.toFixed(1)}</span>
+                                        <span className="font-bold text-gray-900">₹{batchItem.sellingPrice.toFixed(1)}</span>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
-                            );
+                              );
                             });
                           })()
                         ) : (
@@ -1224,43 +1265,74 @@ const ProductTable = () => {
       </section>
 
       {cartOpen && (
-        <div className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-[2px]">
-          <div className="ml-auto flex h-full w-full max-w-lg flex-col bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400">Cart view</p>
-                <h3 className="text-xl font-semibold text-[#0a2e2a]">Selected medicines</h3>
+        <div className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[2px]" onClick={() => setCartOpen(false)}>
+          <div className="ml-auto flex h-full w-full max-w-xs flex-col bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50">
+                  <ShoppingCart size={14} className="text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-400">Cart View</p>
+                  <h3 className="text-sm font-bold leading-tight text-[#0a2e2a]">Selected medicines</h3>
+                </div>
               </div>
-              <button onClick={() => setCartOpen(false)} className="rounded-full border border-gray-200 p-2 text-gray-500">
-                <X size={18} />
+              <button onClick={() => setCartOpen(false)} className="rounded-full p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                <X size={16} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="space-y-3">
+            {/* Item count pill */}
+            {selectedItems.length > 0 && (
+              <div className="px-4 py-2">
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  {selectedCount} {selectedCount === 1 ? 'item' : 'items'} added
+                </span>
+              </div>
+            )}
+
+            {/* Items list */}
+            <div className="flex-1 overflow-y-auto px-3 pb-3">
+              <div className="space-y-2">
                 {selectedItems.length === 0 ? (
-                    <div className="rounded-[24px] border border-dashed border-gray-200 bg-gray-50 px-4 py-12 text-center">
-                      <ShoppingCart size={28} className="mx-auto text-gray-300" />
-                      <p className="mt-2 text-sm font-semibold text-gray-500">Cart is empty</p>
-                    </div>
+                  <div className="mt-8 rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-10 text-center">
+                    <ShoppingCart size={22} className="mx-auto text-gray-300" />
+                    <p className="mt-2 text-xs font-semibold text-gray-400">Cart is empty</p>
+                    <p className="mt-1 text-[10px] text-gray-300">Add medicines from the list</p>
+                  </div>
                 ) : (
                   selectedItems.map((item) => {
                     const id = item.key;
                     const price = resolveBillPrice(item);
+                    const lineTotal = item.qty * price;
                     return (
-                      <div key={id} className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-2.5">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-[15px] font-semibold leading-tight text-[#061412]">{resolveMedicineTitle(item.product)}</p>
-                            <p className="mt-0.5 text-xs text-gray-500">Rs {price.toFixed(2)} each</p>
-                          </div>
-                          <button onClick={() => removeBillItem(id)} className="rounded-full border border-gray-200 bg-white p-1.5 text-gray-400 hover:text-red-500">
-                            <X size={14} />
-                          </button>
+                      <div key={id} className="group relative rounded-xl border border-gray-100 bg-white p-3 shadow-sm transition-all hover:border-emerald-100 hover:shadow-md">
+                        {/* Remove button */}
+                        <button
+                          onClick={() => removeBillItem(id)}
+                          className="absolute right-2 top-2 rounded-full p-1 text-gray-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-red-50 hover:text-red-400"
+                        >
+                          <X size={11} />
+                        </button>
+
+                        {/* Medicine name & price */}
+                        <div className="pr-5">
+                          <p className="truncate text-xs font-bold leading-tight text-[#061412]">{resolveMedicineTitle(item.product)}</p>
+                          <p className="mt-0.5 text-[10px] text-gray-400">₹{price.toFixed(2)} / unit</p>
                         </div>
-                        <div className="mt-2 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <QtyButton label="-" onClick={() => setBillQty(id, item.qty - 1)} />
+
+                        {/* Qty controls + line total */}
+                        <div className="mt-2.5 flex items-center justify-between">
+                          <div className="flex items-center gap-1 rounded-lg bg-gray-50 p-1">
+                            <button
+                              type="button"
+                              onClick={() => setBillQty(id, item.qty - 1)}
+                              className="flex h-6 w-6 items-center justify-center rounded-md bg-white text-gray-500 shadow-sm transition hover:bg-rose-50 hover:text-rose-500 active:scale-90 text-xs font-bold"
+                            >
+                              −
+                            </button>
                             <input
                               type="text"
                               inputMode="numeric"
@@ -1274,11 +1346,19 @@ const ProductTable = () => {
                               }}
                               onFocus={(e) => handleQtyFocus(id, e.currentTarget.value, e.currentTarget)}
                               onBlur={(e) => handleQtyBlur(id, e.currentTarget.value)}
-                              className="w-16 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-center text-sm font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-[#bbed3b]"
+                              className="w-9 border-none bg-transparent text-center text-xs font-bold text-gray-800 outline-none"
                             />
-                            <QtyButton label="+" onClick={() => setBillQty(id, item.qty + 1)} />
+                            <button
+                              type="button"
+                              onClick={() => setBillQty(id, item.qty + 1)}
+                              className="flex h-6 w-6 items-center justify-center rounded-md bg-white text-gray-500 shadow-sm transition hover:bg-emerald-50 hover:text-emerald-600 active:scale-90 text-xs font-bold"
+                            >
+                              +
+                            </button>
                           </div>
-                          <span className="text-sm font-semibold text-gray-900">Rs {(item.qty * price).toFixed(2)}</span>
+                          <div className="text-right">
+                            <p className="text-xs font-black text-[#0a2e2a]">₹{lineTotal.toFixed(2)}</p>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1287,21 +1367,22 @@ const ProductTable = () => {
               </div>
             </div>
 
-            <div className="border-t border-gray-100 p-6">
-              <div className="rounded-[24px] bg-[#0a2e2a] p-5 text-white shadow-inner">
-                <div className="flex items-center justify-between opacity-60">
-                  <p className="text-[10px] font-black uppercase tracking-[0.24em]">Grand Total</p>
-                  <p className="text-[10px] font-black uppercase tracking-[0.24em]">{selectedCount} Items</p>
+            {/* Footer: total + process bill */}
+            <div className="border-t border-gray-100 px-3 pb-4 pt-3">
+              <div className="rounded-xl bg-[#0a2e2a] px-4 py-3 text-white">
+                <div className="flex items-center justify-between">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-white/50">Grand Total</p>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-white/50">{selectedCount} {selectedCount === 1 ? 'item' : 'items'}</p>
                 </div>
-                <p className="mt-2 text-4xl font-black tracking-tight">₹{billTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                <p className="mt-1 text-2xl font-black tracking-tight">₹{billTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
               </div>
               <button
                 type="button"
                 onClick={createBill}
                 disabled={billingSaving}
-                className="mt-4 w-full rounded-2xl bg-[#bbed3b] px-4 py-4 text-base font-black uppercase tracking-widest text-[#0a2e2a] transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-70"
+                className="mt-2.5 w-full rounded-xl bg-[#bbed3b] px-4 py-3 text-xs font-black uppercase tracking-widest text-[#0a2e2a] transition-all hover:scale-[1.01] hover:bg-[#c8f74d] active:scale-95 disabled:opacity-70"
               >
-                {billingSaving ? <Loader2 className="mx-auto animate-spin" size={22} /> : 'Process Bill'}
+                {billingSaving ? <Loader2 className="mx-auto animate-spin" size={16} /> : 'Process Bill'}
               </button>
             </div>
           </div>
@@ -1348,28 +1429,117 @@ const ProductTable = () => {
       )}
 
       {selectedCount > 0 && (
-        <div className="fixed bottom-8 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 px-6">
-          <div className="group flex items-center justify-between rounded-[32px] bg-[#02100e] p-2.5 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] ring-1 ring-white/10 backdrop-blur-xl transition-all hover:scale-[1.02]">
-            <div className="flex items-center gap-4 pl-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20">
-                <ShoppingCart size={24} className="transition-transform group-hover:rotate-12" />
+        <div className="fixed bottom-6 left-1/2 z-50 w-full max-w-md -translate-x-1/2 px-4">
+          <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#0a2e2a] p-2 pl-4 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.4)] ring-1 ring-white/5">
+            {/* Left: icon + bill info */}
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10">
+                <ShoppingCart size={16} className="text-emerald-400" />
               </div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500/70">Current Bill</p>
-                <div className="flex items-center gap-2">
-                  <span className="text-xl font-black text-white">₹{billTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  <span className="h-1 w-1 rounded-full bg-white/20" />
-                  <span className="text-xs font-bold text-white/50">{selectedCount} {selectedCount === 1 ? 'item' : 'items'}</span>
+                <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/40">Current Bill</p>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base font-black text-white">₹{billTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-bold text-white/50">{selectedCount} {selectedCount === 1 ? 'item' : 'items'}</span>
                 </div>
               </div>
             </div>
+            {/* Right: checkout button */}
             <button
               onClick={() => setCartOpen(true)}
-              className="flex items-center gap-2 rounded-2xl bg-[#bbed3b] px-6 py-4 text-sm font-black uppercase tracking-widest text-[#0a2e2a] shadow-[0_10px_20px_-5px_rgba(187,237,59,0.3)] transition-all hover:bg-[#c8f74d] active:scale-95"
+              className="flex items-center gap-1.5 rounded-xl bg-[#bbed3b] px-5 py-2.5 text-xs font-black uppercase tracking-widest text-[#0a2e2a] transition-all hover:bg-[#c8f74d] active:scale-95"
             >
               Checkout
-              <ArrowRight size={18} />
+              <ArrowRight size={14} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Product Drawer (Add/Edit) */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="flex w-full max-w-2xl max-h-[90vh] flex-col rounded-3xl bg-white shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-600">Inventory Management</p>
+                <h3 className="text-xl font-semibold text-[#0a2e2a]">{editingProductId ? 'Edit Product' : 'Add New Medicine'}</h3>
+              </div>
+              <button onClick={closeProductDrawer} className="rounded-full border border-gray-200 p-2 text-gray-500 hover:bg-gray-50"><X size={18} /></button>
+            </div>
+            <form onSubmit={saveProduct} className="flex-1 overflow-y-auto p-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <Field required label="Medicine Name" value={form.medicine_name} onChange={v => setForm({ ...form, medicine_name: v })} />
+                </div>
+                <Field label="Generic Name (Salt)" value={form.generic_name} onChange={v => setForm({ ...form, generic_name: v })} />
+                <Field label="Brand / Manufacturer" value={form.brand_name} onChange={v => setForm({ ...form, brand_name: v })} />
+                <SelectField label="Schedule" value={form.schedule} onChange={v => setForm({ ...form, schedule: v })} options={SCHEDULES} />
+                <SelectField label="Category" value={form.category} onChange={v => setForm({ ...form, category: v })} options={['General', 'Tablet', 'Capsule', 'Syrup', 'Injection', 'Cream', 'Drops', 'Other']} />
+
+                <div className="md:col-span-2 grid grid-cols-2 gap-4 rounded-2xl bg-emerald-50/50 p-4 border border-emerald-100">
+                  <Field type="number" required label="Buying Price (₹)" value={String(form.purchase_price)} onChange={v => setForm({ ...form, purchase_price: Number(v) })} />
+                  <Field type="number" required label="Selling Price / MRP (₹)" value={String(form.selling_price)} onChange={v => setForm({ ...form, selling_price: Number(v) })} />
+                </div>
+
+                <Field label="Barcode / QR" value={form.barcode} onChange={v => setForm({ ...form, barcode: v })} />
+                <MonthYearField label="Default Expiry" value={form.expiry_month_year} onChange={v => setForm({ ...form, expiry_month_year: v })} />
+                <div className="md:col-span-2">
+                  <Field label="Product Image URL" value={form.product_image_url} onChange={v => setForm({ ...form, product_image_url: v })} />
+                </div>
+              </div>
+              <div className="mt-8 flex gap-3 border-t border-gray-100 pt-6">
+                <button type="button" onClick={closeProductDrawer} className="flex-1 rounded-2xl border border-gray-200 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button type="submit" disabled={saving} className="flex-1 rounded-2xl bg-[#0a2e2a] py-3 text-sm font-semibold text-[#bbed3b] shadow-lg disabled:opacity-70 active:scale-[0.98]">
+                  {saving ? <Loader2 className="mx-auto animate-spin" size={18} /> : (editingProductId ? 'Update' : 'Save Product')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Dialog */}
+      {batchDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-[#0a2e2a]">Add New Batch</h3>
+              <button onClick={closeBatchDialog} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+            </div>
+            <form onSubmit={saveBatch} className="space-y-4">
+              <Field required label="Batch Number" value={batchForm.batch_no} onChange={v => setBatchForm({ ...batchForm, batch_no: v })} />
+              <MonthYearField required label="Expiry Date" value={batchForm.expiry_month_year} onChange={v => setBatchForm({ ...batchForm, expiry_month_year: v })} />
+              <Field type="number" required label="Quantity" value={String(batchForm.quantity)} onChange={v => setBatchForm({ ...batchForm, quantity: Number(v) })} />
+              <div className="grid grid-cols-2 gap-4">
+                <Field type="number" label="Buying Price" value={String(batchForm.purchase_rate_per_base)} onChange={v => setBatchForm({ ...batchForm, purchase_rate_per_base: v })} />
+                <Field type="number" label="Selling Price" value={String(batchForm.mrp_per_base)} onChange={v => setBatchForm({ ...batchForm, mrp_per_base: v })} />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={closeBatchDialog} className="flex-1 rounded-2xl border border-gray-200 py-3 text-sm font-medium">Cancel</button>
+                <button type="submit" disabled={batchSaving} className="flex-1 rounded-2xl bg-[#0a2e2a] py-3 text-sm font-semibold text-[#bbed3b]">
+                  {batchSaving ? <Loader2 className="mx-auto animate-spin" size={18} /> : 'Add Batch'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* OCR/Scan Dialog */}
+      {ocrDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl text-center">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-[#0a2e2a]">Scan Medicine</h3>
+              <button onClick={closeOcrDialog} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+            </div>
+            <div className="aspect-video rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 flex flex-col items-center justify-center gap-3">
+              <Camera size={48} className="text-gray-300" />
+              <p className="text-sm text-gray-500">Camera module not configured.</p>
+              <p className="text-[10px] text-gray-400 max-w-xs uppercase tracking-widest font-bold">Please configure Google Vision API key</p>
+            </div>
+            <button onClick={closeOcrDialog} className="mt-6 w-full rounded-2xl bg-gray-100 py-3 text-sm font-bold text-gray-700">Close</button>
           </div>
         </div>
       )}
