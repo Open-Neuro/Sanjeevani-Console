@@ -539,6 +539,25 @@ const ProductTable = () => {
     return next;
   }, [processedProducts, filter, search]);
 
+  // Barcode Auto-Add Logic
+  useEffect(() => {
+    if (search.length >= 8) { // Typical barcode length
+        const match = processedProducts.find(p => 
+            (p.barcodes || []).some(bc => bc.code === search) || 
+            (p.id === search || p._id === search)
+        );
+        if (match) {
+            const key = resolveProductKey(match);
+            if (key && !selected[key]) {
+                addBillItem(match, key);
+                setSearch(''); // Clear search for next scan
+                setMessage(`Scanned: ${resolveMedicineTitle(match)}`);
+                setTimeout(() => setMessage(null), 2000);
+            }
+        }
+    }
+  }, [search, processedProducts]);
+
   const selectedItems = Object.values(selected);
   const selectedCount = selectedItems.length;
   const billTotal = selectedItems.reduce((sum, item) => sum + item.qty * resolveBillPrice(item), 0);

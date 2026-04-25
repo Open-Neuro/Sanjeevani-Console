@@ -61,6 +61,14 @@ export const fetchDashboardProducts = async () => {
     return response.json();
 };
 
+export const fetchDashboardCustomerInsights = async () => {
+    return apiGet('/dashboard/customers');
+};
+
+export const fetchDashboardOrderAnalytics = async () => {
+    return apiGet('/dashboard/orders');
+};
+
 export const fetchOperationalStatus = async () => {
     return apiGet('/dashboard/ops-status');
 };
@@ -90,6 +98,12 @@ export const fetchExpiryRisk = async () => {
 export const fetchRecentOrders = async (limit = 5) => {
     const response = await authFetch(`${API_BASE_URL}/orders/?page_size=${limit}`);
     if (!response.ok) throw new Error('Failed to fetch recent orders');
+    return response.json();
+};
+
+export const fetchOrderDetails = async (orderId: string) => {
+    const response = await authFetch(`${API_BASE_URL}/orders/${encodeURIComponent(orderId)}`);
+    if (!response.ok) throw new Error(`Failed to fetch order details for ${orderId}`);
     return response.json();
 };
 
@@ -244,6 +258,14 @@ export const fetchCustomers = async (page = 1, pageSize = 20, search = '') => {
     const response = await authFetch(url);
     if (!response.ok) throw new Error('Failed to fetch customers');
     return response.json();
+};
+
+export const fetchPatientProfile = async (patientId: string) => {
+    return apiGet(`/customers/${encodeURIComponent(patientId)}`);
+};
+
+export const fetchPatientOrders = async (patientId: string, page = 1, pageSize = 10) => {
+    return apiGet(`/customers/${encodeURIComponent(patientId)}/orders?page=${page}&page_size=${pageSize}`);
 };
 
 export const fetchAIInsights = async () => {
