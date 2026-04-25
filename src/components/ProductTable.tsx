@@ -3,16 +3,16 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowRight,
-  Camera,
   Check,
   Clock,
   Image as ImageIcon,
-  Pencil,
   Loader2,
   Minus,
   Package,
+  Pencil,
   Plus,
   Search,
+  ShieldCheck,
   ShoppingCart,
   Trash2,
   TrendingUp,
@@ -89,6 +89,12 @@ type ProductRow = {
   "Product ID"?: string;
   unit_type?: string;
   base_uom?: string;
+  hsn_code?: string;
+  gst_percentage?: number;
+  is_schedule_h?: boolean;
+  is_schedule_h1?: boolean;
+  location_rack?: string;
+  min_stock_alert?: number;
 };
 
 type ProductForm = {
@@ -103,6 +109,12 @@ type ProductForm = {
   selling_price: number;
   purchase_price: number;
   mrp: number;
+  hsn_code: string;
+  gst_percentage: number; // e.g. 12
+  is_schedule_h: boolean;
+  is_schedule_h1: boolean;
+  location_rack: string;
+  min_stock_alert: number;
   schedule: string;
   prescription_required: boolean;
   packaging: {
@@ -146,11 +158,17 @@ const emptyForm = (): ProductForm => ({
   supplier_name: '',
   category: 'General',
   stock: 0,
-  batch_no: '',
+  batch_no: generateDefaultBatchId(),
   expiry_date: '',
   selling_price: 0,
   purchase_price: 0,
   mrp: 0,
+  hsn_code: '',
+  gst_percentage: 12,
+  is_schedule_h: false,
+  is_schedule_h1: false,
+  location_rack: '',
+  min_stock_alert: 10,
   schedule: 'OTC',
   prescription_required: false,
   packaging: {
@@ -188,6 +206,8 @@ const displayExpiry = (d?: string) => {
   if (m) return `${m[3]}/${m[2]}/${m[1]}`; // Display as DD/MM/YYYY
   return d;
 };
+
+const generateDefaultBatchId = () => `BAT-${Math.floor(1000 + Math.random() * 9000)}`;
 
 // --- CSV parser ---
 const parseCSV = (text: string): ImportRow[] => {
@@ -251,14 +271,34 @@ const ProductTable = () => {
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importPreviewing, setImportPreviewing] = useState(false);
   const [importSaving, setImportSaving] = useState(false);
-  const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
-  const [ocrProcessing, setOcrProcessing] = useState(false);
-  const [extractedProduct, setExtractedProduct] = useState<ExtractedProduct | null>(null);
-  const [productImage, setProductImage] = useState<string | null>(null);
-  const [ocrError, setOcrError] = useState<string | null>(null);
   const [selectedUnitType, setSelectedUnitType] = useState<UnitType>('strip');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [lastBill, setLastBill] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const qtyAutoSelectUsed = useRef<Record<string, boolean>>({});
+
+  // --- Keyboard Shortcuts ---
+  useEffect(() => {
+    const handleKeys = (e: KeyboardEvent) => {
+      if (e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        openProductDrawer();
+      } else if (e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      } else if (e.altKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setCartOpen(true);
+      } else if (e.key === 'Escape') {
+        setDrawerOpen(false);
+        setCartOpen(false);
+        setBatchDialogOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeys);
+    return () => window.removeEventListener('keydown', handleKeys);
+  }, []);
 
   const resolveName = (p: ProductRow) => p['Medicine Name'] || p.medicine_name || '';
   const resolveStrength = (p: ProductRow) => p.strength || p['Strength'] || '';
@@ -398,20 +438,6 @@ const ProductTable = () => {
     qtyAutoSelectUsed.current[key] = false;
   };
 
-  const openOcrDialog = () => {
-    setOcrDialogOpen(true);
-    setProductImage(null);
-    setExtractedProduct(null);
-    setOcrError(null);
-  };
-
-  const closeOcrDialog = () => {
-    setOcrDialogOpen(false);
-    setProductImage(null);
-    setExtractedProduct(null);
-    setOcrError(null);
-  };
-
   const loadProducts = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -458,7 +484,14 @@ const ProductTable = () => {
         computedEarliestExpiry: earliestExpiry,
         computedExpiryDays: expiryDays,
         computedBatches: batches,
-        computedAvailableBatches: availableBatches
+        computedAvailableBatches: availableBatches,
+        // Professional Pharmacy Fields
+        hsn_code: p.hsn_code || '',
+        gst_percentage: Number(p.gst_percentage || 0),
+        is_schedule_h: Boolean(p.is_schedule_h || false),
+        is_schedule_h1: Boolean(p.is_schedule_h1 || false),
+        location_rack: p.location_rack || '',
+        min_stock_alert: Number(p.min_stock_alert || 10)
       };
     });
   }, [products, batchesByProduct, getBatchList]);
@@ -538,7 +571,7 @@ const ProductTable = () => {
     setBatchDialogProduct(product);
     setBatchDialogProductId(productId);
     setBatchForm({
-      batch_no: '',
+      batch_no: generateDefaultBatchId(),
       expiry_date: formatDate(product.expiry_date || product['Expiry Date']),
       quantity: 0,
       supplier_name: resolveCompany(product) || '',
@@ -657,7 +690,7 @@ const ProductTable = () => {
         supplier_name: product.supplier_name || product['Supplier Name'] || '',
         category: product.category || product.Category || 'General',
         stock: Number(product.stock_summary?.available_base_units ?? product['Current Stock'] ?? 0),
-        batch_no: product.batch_no || product['Batch Number'] || '',
+        batch_no: product.batch_no || product['Batch Number'] || generateDefaultBatchId(),
         expiry_date: formatDate(product.expiry_date || product['Expiry Date']),
         selling_price: Number(product.selling_price ?? product['Selling Price'] ?? 0),
         purchase_price: Number(product.purchase_price ?? product['Purchase Price'] ?? 0),
@@ -674,6 +707,12 @@ const ProductTable = () => {
         },
         barcode: product.barcodes?.find(i => i.is_primary)?.code || product.barcodes?.[0]?.code || '',
         product_image_url: (product as any).product_image_url || '',
+        hsn_code: product.hsn_code || '',
+        gst_percentage: product.gst_percentage || 12,
+        is_schedule_h: product.is_schedule_h || false,
+        is_schedule_h1: product.is_schedule_h1 || false,
+        location_rack: product.location_rack || '',
+        min_stock_alert: product.min_stock_alert || 10,
       });
     } else {
       setEditingProductId(null);
@@ -713,6 +752,12 @@ const ProductTable = () => {
         base_uom: form.packaging.base_uom,
         barcodes: form.barcode ? [{ code: form.barcode, level: 'unit', is_primary: true }] : undefined,
         product_image_url: form.product_image_url,
+        hsn_code: form.hsn_code,
+        gst_percentage: form.gst_percentage,
+        is_schedule_h: form.is_schedule_h,
+        is_schedule_h1: form.is_schedule_h1,
+        location_rack: form.location_rack,
+        min_stock_alert: form.min_stock_alert,
       };
       if (isEditing) {
         await updateProduct(editingProductId!, payload);
@@ -822,11 +867,25 @@ const ProductTable = () => {
         })),
       };
       await applyStockActions(payload, `bill-${Date.now()}`);
-      setMessage(`Bill created successfully!`);
+      
+      const billData = {
+        billId: payload.reference_id,
+        items: selectedItems.map(item => ({
+          name: resolveMedicineTitle(item.product),
+          qty: item.qty,
+          price: resolveBillPrice(item),
+          total: item.qty * resolveBillPrice(item)
+        })),
+        total: billTotal,
+        date: new Date().toLocaleString()
+      };
+      
+      setLastBill(billData);
+      setShowReceipt(true);
       setCartOpen(false);
       setSelected({});
       setQtyDrafts({});
-      await loadProducts(true); // Silent reload
+      await loadProducts(true); 
     } catch (error) {
       console.error(error);
       setMessage(error instanceof Error ? error.message : 'Could not create bill');
@@ -845,12 +904,6 @@ const ProductTable = () => {
               className="inline-flex items-center gap-2 rounded-2xl bg-[#0a2e2a] px-3.5 py-2.5 text-sm font-semibold text-[#bbed3b] shadow-sm transition-all hover:bg-[#0f423d] active:scale-95 active:translate-y-0.5"
             >
               <Plus size={16} /> Add Product
-            </button>
-            <button
-              onClick={openOcrDialog}
-              className="inline-flex items-center gap-2 rounded-2xl border border-cyan-200 bg-cyan-50 px-3.5 py-2.5 text-sm font-semibold text-cyan-700 transition-all hover:bg-cyan-100 active:scale-95 active:translate-y-0.5"
-            >
-              <Camera size={16} /> Scan Product
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -899,9 +952,10 @@ const ProductTable = () => {
           <div className="relative group">
             <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600 transition-colors group-focus-within:text-emerald-400" size={17} />
             <input
+              ref={searchRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search medicines, salt, brand, or barcode"
+              placeholder="Search medicines, salt, brand, or barcode (Alt+S)"
               className="w-full rounded-[20px] border border-gray-200 bg-white py-3.5 pl-11 pr-12 text-[15px] text-gray-900 shadow-[0_2px_4px_rgba(0,0,0,0.02)] outline-none transition-all placeholder:text-gray-400 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
             />
             {search && (
@@ -985,7 +1039,7 @@ const ProductTable = () => {
                     if ((e.target as HTMLElement).closest('button, input, select')) return;
                     addBillItem(product, id);
                   }}
-                  className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 px-3 py-3 cursor-pointer ${selected[id]
+                  className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 px-3 py-2 cursor-pointer ${selected[id]
                     ? 'border-emerald-600 bg-emerald-50/50 shadow-[0_8px_30px_rgba(5,150,105,0.15)] ring-1 ring-emerald-600/20'
                     : 'border-gray-100 bg-white hover:border-emerald-200 hover:shadow-md active:border-emerald-300'
                     }`}
@@ -1002,7 +1056,7 @@ const ProductTable = () => {
                       <div className="relative shrink-0">
                         <button
                           onClick={(e) => { e.stopPropagation(); addBillItem(product, id); }}
-                          className={`group/img overflow-hidden relative grid h-[60px] w-[60px] place-items-center rounded-2xl border transition-all active:scale-95 ${selected[id]
+                          className={`group/img overflow-hidden relative grid h-[52px] w-[52px] place-items-center rounded-xl border transition-all active:scale-95 ${selected[id]
                             ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/20 shadow-inner'
                             : 'border-gray-200 bg-gray-50 hover:border-emerald-200 hover:bg-white'
                             }`}
@@ -1024,7 +1078,7 @@ const ProductTable = () => {
 
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="truncate text-[20px] font-black leading-tight text-[#02100e] tracking-tight">
+                          <h4 className="truncate text-[17px] font-black leading-tight text-[#02100e] tracking-tight">
                             {resolveMedicineTitle(product)}
                           </h4>
                           {resolveStrength(product) ? (
@@ -1035,14 +1089,18 @@ const ProductTable = () => {
                         </div>
 
                         {resolveCompany(product) ? (
-                          <div className="mt-1 text-sm font-medium text-gray-500">{resolveCompany(product)}</div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs font-medium text-gray-500">{resolveCompany(product)}</span>
+                            {product.is_schedule_h && <span className="rounded-md bg-red-50 px-1.5 py-0.5 text-[8px] font-black text-red-600 ring-1 ring-red-200">Sch H</span>}
+                            {product.is_schedule_h1 && <span className="rounded-md bg-rose-600 px-1.5 py-0.5 text-[8px] font-black text-white">Sch H1</span>}
+                          </div>
                         ) : null}
 
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-gray-600">
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); openBatchDialog(product, id); }}
-                            className={`group flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold tracking-tight transition-all active:scale-95 ${product.batch_no || product['Batch Number']
+                            className={`group flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-tight transition-all active:scale-95 ${product.batch_no || product['Batch Number']
                               ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                               : 'bg-rose-50 text-rose-600 hover:bg-rose-100 ring-1 ring-rose-200/50'
                               }`}
@@ -1051,30 +1109,30 @@ const ProductTable = () => {
                           </button>
 
                           <div className="flex items-center gap-2">
-                            <span className="flex items-center gap-1 rounded-full bg-gray-50 px-2.5 py-1 font-semibold text-gray-600 ring-1 ring-gray-200/50">
-                              <Package size={12} className="text-gray-400" />
+                            <span className="flex items-center gap-1 rounded-full bg-gray-50 px-2 py-0.5 font-semibold text-gray-600 ring-1 ring-gray-200/50">
+                              <Package size={11} className="text-gray-400" />
                               Stock: {formatPackAmount(stock, product)}
                             </span>
 
                             {expiryBadge && (
-                              <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 font-bold ring-1 ${expiryBadge.className.includes('red') ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-amber-50 text-amber-700 ring-amber-200'}`}>
-                                <AlertTriangle size={12} />
+                              <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-bold ring-1 ${expiryBadge.className.includes('red') ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-amber-50 text-amber-700 ring-amber-200'}`}>
+                                <AlertTriangle size={11} />
                                 {expiryBadge.label}
                               </span>
                             )}
 
                             {stock < 20 && stock > 0 && (
-                              <span className="flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 font-bold text-orange-700 ring-1 ring-orange-200">
-                                <TrendingUp size={12} className="rotate-180" />
-                                Low Stock
+                              <span className="flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 font-bold text-orange-700 ring-1 ring-orange-200">
+                                <TrendingUp size={11} className="rotate-180" />
+                                Low
                               </span>
                             )}
                           </div>
                         </div>
 
-                        <div className="mt-3 flex items-center gap-4 text-[11px] font-medium text-gray-400">
+                        <div className="mt-2 flex items-center gap-3 text-[10px] font-medium text-gray-400">
                           <span className="flex items-center gap-1">
-                            <Clock size={12} />
+                            <Clock size={11} />
                             Exp: {displayExpiry(earliestExpiry)}
                           </span>
                           <span className="h-1 w-1 rounded-full bg-gray-300" />
@@ -1084,53 +1142,54 @@ const ProductTable = () => {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 lg:gap-2.5">
-                      <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 transition-colors hover:border-emerald-200">
-                        <div className="leading-tight">
-                          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-600">Sale Price</p>
-                          <p className="text-sm font-bold text-gray-900">₹{price.toFixed(2)}</p>
-                        </div>
+                      <div className="inline-flex flex-col items-center gap-1 rounded-2xl border border-gray-200 bg-white px-2.5 py-1.5 transition-colors hover:border-emerald-200">
+                        <p className="text-[8px] font-black uppercase tracking-[0.18em] text-emerald-600">Sale Price</p>
+                        <p className="text-xs font-bold text-gray-900">₹{price.toFixed(2)}</p>
+                        {product.gst_percentage > 0 && <p className="text-[7px] font-medium text-gray-400">Inc. {product.gst_percentage}% GST</p>}
                       </div>
-                      <div className="inline-flex items-center gap-2 rounded-full border border-gray-100 bg-gray-50/50 px-3 py-2">
-                        <div className="leading-tight">
-                          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">Buying</p>
-                          <p className="text-sm font-medium text-gray-500">₹{buyPrice.toFixed(2)}</p>
-                        </div>
+                      <div className="inline-flex flex-col items-center gap-1 rounded-2xl border border-gray-100 bg-gray-50/50 px-2.5 py-1.5">
+                        <p className="text-[8px] font-bold uppercase tracking-[0.14em] text-gray-400">Buying</p>
+                        <p className="text-xs font-medium text-gray-500">₹{buyPrice.toFixed(2)}</p>
                       </div>
 
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); openProductDrawer(product, id); }}
-                        className="grid h-9 w-9 place-items-center rounded-full border border-gray-200 bg-white text-gray-700 transition-all hover:bg-gray-50 active:scale-90"
+                        className="grid h-8 w-8 place-items-center rounded-full border border-gray-200 bg-white text-gray-700 transition-all hover:bg-gray-50 active:scale-90"
                         title="Edit product"
                       >
-                        <Pencil size={14} />
+                        <Pencil size={13} />
                       </button>
 
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); toggleExpandedProduct(id); }}
-                        className="grid h-9 w-9 place-items-center rounded-full border border-gray-200 bg-white text-gray-700 transition-all hover:bg-gray-50 active:scale-90"
+                        className={`grid h-8 w-8 place-items-center rounded-full border transition-all active:scale-90 ${
+                          expandedProductId === id 
+                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-md' 
+                            : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
                         title={expandedProductId === id ? 'Hide batches' : 'Show batches'}
                       >
-                        <Package size={14} />
+                        <Package size={13} />
                       </button>
 
                       <button
                         onClick={(e) => { e.stopPropagation(); addBillItem(product, id); }}
-                        className={`grid h-9 w-9 place-items-center rounded-full transition-all active:scale-90 ${selected[id] ? 'bg-emerald-600 text-white shadow-md' : 'bg-[#0a2e2a] text-[#bbed3b] hover:bg-[#0f423d]'
+                        className={`grid h-8 w-8 place-items-center rounded-full transition-all active:scale-90 ${selected[id] ? 'bg-emerald-600 text-white shadow-md' : 'bg-[#0a2e2a] text-[#bbed3b] hover:bg-[#0f423d]'
                           }`}
                         title={selected[id] ? 'Added to bill' : 'Add to bill'}
                       >
-                        {selected[id] ? <Check size={14} /> : <Plus size={14} />}
+                        {selected[id] ? <Check size={13} /> : <Plus size={13} />}
                       </button>
 
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); confirmDeleteProduct(product, id); }}
-                        className="grid h-9 w-9 place-items-center rounded-full border border-gray-200 bg-white text-gray-600 transition-all hover:bg-rose-50 hover:text-rose-600 active:scale-90"
+                        className="grid h-8 w-8 place-items-center rounded-full border border-gray-200 bg-white text-gray-600 transition-all hover:bg-rose-50 hover:text-rose-600 active:scale-90"
                         title="Delete product"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={13} />
                       </button>
                     </div>
                   </div>
@@ -1462,45 +1521,204 @@ const ProductTable = () => {
         </div>
       )}
 
-      {/* Product Drawer (Add/Edit) */}
+      {/* Centered Add/Edit Product Modal */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="flex w-full max-w-2xl max-h-[90vh] flex-col rounded-3xl bg-white shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[4px] p-4">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-[32px] bg-white shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-8 py-5">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-600">Inventory Management</p>
-                <h3 className="text-xl font-semibold text-[#0a2e2a]">{editingProductId ? 'Edit Product' : 'Add New Medicine'}</h3>
+                <h2 className="text-2xl font-black text-[#0a2e2a] tracking-tight">
+                  {editingProductId ? 'Edit Medicine Info' : 'Add New Medicine (Alt+N)'}
+                </h2>
+                <p className="text-xs font-medium text-gray-500">Configure stock, pricing, and initial batch details</p>
               </div>
-              <button onClick={closeProductDrawer} className="rounded-full border border-gray-200 p-2 text-gray-500 hover:bg-gray-50"><X size={18} /></button>
+              <button onClick={closeProductDrawer} className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all">
+                <X size={22} />
+              </button>
             </div>
-            <form onSubmit={saveProduct} className="flex-1 overflow-y-auto p-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="md:col-span-2">
-                  <Field required label="Medicine Name" value={form.medicine_name} onChange={v => setForm({ ...form, medicine_name: v })} />
-                </div>
-                <Field label="Generic Name (Salt)" value={form.generic_name} onChange={v => setForm({ ...form, generic_name: v })} />
-                <Field label="Brand / Manufacturer" value={form.brand_name} onChange={v => setForm({ ...form, brand_name: v })} />
-                <SelectField label="Schedule" value={form.schedule} onChange={v => setForm({ ...form, schedule: v })} options={SCHEDULES} />
-                <SelectField label="Category" value={form.category} onChange={v => setForm({ ...form, category: v })} options={['General', 'Tablet', 'Capsule', 'Syrup', 'Injection', 'Cream', 'Drops', 'Other']} />
 
-                <div className="md:col-span-2 grid grid-cols-2 gap-4 rounded-2xl bg-emerald-50/50 p-4 border border-emerald-100">
-                  <Field type="number" required label="Buying Price (₹)" value={String(form.purchase_price)} onChange={v => setForm({ ...form, purchase_price: Number(v) })} />
-                  <Field type="number" required label="Selling Price / MRP (₹)" value={String(form.selling_price)} onChange={v => setForm({ ...form, selling_price: Number(v) })} />
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
+              <form onSubmit={saveProduct} className="space-y-8 pb-4">
+                {/* Section 1: Basic Info & Category */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="md:col-span-1">
+                    <div className="group relative flex aspect-square flex-col items-center justify-center overflow-hidden rounded-[24px] border-2 border-dashed border-gray-200 bg-gray-50 transition-all hover:border-emerald-400 hover:bg-emerald-50/30">
+                      {form.product_image_url ? (
+                        <>
+                          <img src={form.product_image_url} className="h-full w-full object-cover" alt="" />
+                          <button 
+                            type="button" 
+                            onClick={() => setForm({ ...form, product_image_url: '' })}
+                            className="absolute top-2 right-2 rounded-full bg-white/90 p-1.5 text-rose-500 shadow-sm transition-all hover:scale-110 active:scale-95"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 p-4 text-center">
+                          <ImageIcon className="text-gray-300" size={32} />
+                          <span className="text-[10px] font-bold text-gray-400">No Image</span>
+                          <button 
+                            type="button"
+                            className="mt-2 rounded-full bg-white px-3 py-1 text-[10px] font-bold text-emerald-600 shadow-sm ring-1 ring-emerald-100 hover:bg-emerald-50"
+                            onClick={() => {
+                              const url = prompt('Enter Image URL:');
+                              if (url) setForm({ ...form, product_image_url: url });
+                            }}
+                          >
+                            Add URL
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-2 space-y-4">
+                    <Field required label="Medicine Name" value={form.medicine_name} onChange={v => setForm({ ...form, medicine_name: v })} />
+                    <Field label="Generic Name (Salt)" value={form.generic_name} onChange={v => setForm({ ...form, generic_name: v })} />
+                    <div className="grid grid-cols-2 gap-4">
+                      <SelectField label="Category" value={form.category} onChange={v => setForm({ ...form, category: v })} options={['Tablet', 'Syrup', 'Capsule', 'Injection', 'Cream', 'Drops', 'Other']} />
+                      <SelectField label="Base Packaging" value={form.packaging.base_uom} onChange={v => setForm({ ...form, packaging: { ...form.packaging, base_uom: v } })} options={['unit', 'strip', 'box', 'bottle', 'vial']} />
+                    </div>
+                  </div>
                 </div>
 
-                <Field label="Barcode / QR" value={form.barcode} onChange={v => setForm({ ...form, barcode: v })} />
-                <Field type="date" label="Expiry Date" value={form.expiry_date} onChange={v => setForm({ ...form, expiry_date: v })} />
-                <div className="md:col-span-2">
-                  <Field label="Product Image URL" value={form.product_image_url} onChange={v => setForm({ ...form, product_image_url: v })} />
+                {/* Section 2: Pricing & GST */}
+                <div className="rounded-[28px] bg-emerald-50/30 p-6 ring-1 ring-emerald-500/10">
+                  <div className="mb-4 flex items-center gap-2">
+                    <TrendingUp className="text-emerald-600" size={18} />
+                    <h3 className="text-sm font-black uppercase tracking-widest text-[#0a2e2a]">Pricing & Taxation</h3>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <Field type="number" required label="Buying Rate" value={String(form.purchase_price)} onChange={v => setForm({ ...form, purchase_price: Number(v) })} />
+                    <Field type="number" required label="Selling Price" value={String(form.selling_price)} onChange={v => setForm({ ...form, selling_price: Number(v) })} />
+                    <SelectField label="GST %" value={String(form.gst_percentage)} onChange={v => setForm({ ...form, gst_percentage: Number(v) })} options={['0', '5', '12', '18', '28']} />
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-emerald-100 pt-4">
+                    <div className="flex flex-col">
+                      <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-tighter">Profit Margin</span>
+                      <span className="text-sm font-black text-emerald-900">
+                        {form.selling_price > 0 ? (((form.selling_price - form.purchase_price) / form.selling_price) * 100).toFixed(1) : 0}%
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">GST Breakdown</span>
+                      <span className="text-[11px] font-medium text-gray-600">
+                        CGST: {(form.gst_percentage / 2)}% | SGST: {(form.gst_percentage / 2)}%
+                      </span>
+                    </div>
+                  </div>
                 </div>
+
+                {/* Section 3: Initial Batch Details (Only for New Products) */}
+                {!editingProductId && (
+                  <div className="rounded-[28px] bg-gray-50/80 p-6 ring-1 ring-gray-200/50">
+                    <div className="mb-4 flex items-center gap-2">
+                      <Clock className="text-gray-600" size={18} />
+                      <h3 className="text-sm font-black uppercase tracking-widest text-[#0a2e2a]">Initial Batch & Stock</h3>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <Field label="Batch Number" value={form.batch_no} onChange={v => setForm({ ...form, batch_no: v })} />
+                      <Field type="date" label="Expiry Date" value={form.expiry_date} onChange={v => setForm({ ...form, expiry_date: v })} />
+                      <Field type="number" label="Initial Stock Qty" value={String(form.stock)} onChange={v => setForm({ ...form, stock: Number(v) })} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Section 4: Regulatory & Storage */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="text-rose-600" size={18} />
+                      <h3 className="text-sm font-black uppercase tracking-widest text-[#0a2e2a]">Regulatory</h3>
+                    </div>
+                    <div className="flex flex-wrap gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input type="checkbox" checked={form.is_schedule_h} onChange={e => setForm({ ...form, is_schedule_h: e.target.checked })} className="h-4 w-4 rounded-md border-gray-300 text-rose-600" />
+                        <span className="text-xs font-bold text-gray-600">Schedule H</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input type="checkbox" checked={form.is_schedule_h1} onChange={e => setForm({ ...form, is_schedule_h1: e.target.checked })} className="h-4 w-4 rounded-md border-gray-300 text-rose-600" />
+                        <span className="text-xs font-bold text-gray-600">Schedule H1</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Package className="text-emerald-600" size={18} />
+                      <h3 className="text-sm font-black uppercase tracking-widest text-[#0a2e2a]">Storage</h3>
+                    </div>
+                    <Field label="Rack / Location" value={form.location_rack} onChange={v => setForm({ ...form, location_rack: v })} />
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            <div className="flex gap-4 border-t border-gray-100 bg-gray-50/30 p-8">
+              <button type="button" onClick={closeProductDrawer} className="flex-1 rounded-2xl border border-gray-200 py-4 text-sm font-bold text-gray-500 hover:bg-gray-100">
+                Cancel
+              </button>
+              <button onClick={(e) => { e.preventDefault(); saveProduct(e as any); }} disabled={saving} className="flex-[2] rounded-2xl bg-[#0a2e2a] py-4 text-sm font-black text-[#bbed3b] shadow-xl shadow-emerald-900/10 hover:bg-[#0f423d] active:scale-95 transition-all">
+                {saving ? <Loader2 className="mx-auto animate-spin" size={20} /> : editingProductId ? 'Update Medicine' : 'Add Product & Batch'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Real-time Receipt Modal */}
+      {showReceipt && lastBill && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+          <div className="w-full max-w-md animate-in zoom-in-95 duration-300">
+            <div className="overflow-hidden rounded-[32px] bg-white shadow-2xl">
+              <div className="bg-[#0a2e2a] p-8 text-center text-white">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20">
+                  <Check size={32} className="text-emerald-400" />
+                </div>
+                <h3 className="text-2xl font-black tracking-tight">Bill Generated</h3>
+                <p className="mt-1 text-sm text-white/60">Stock updated in real-time</p>
               </div>
-              <div className="mt-8 flex gap-3 border-t border-gray-100 pt-6">
-                <button type="button" onClick={closeProductDrawer} className="flex-1 rounded-2xl border border-gray-200 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
-                <button type="submit" disabled={saving} className="flex-1 rounded-2xl bg-[#0a2e2a] py-3 text-sm font-semibold text-[#bbed3b] shadow-lg disabled:opacity-70 active:scale-[0.98]">
-                  {saving ? <Loader2 className="mx-auto animate-spin" size={18} /> : (editingProductId ? 'Update' : 'Save Product')}
+              
+              <div className="p-8">
+                <div className="mb-6 flex items-center justify-between border-b border-dashed border-gray-200 pb-4">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Order ID</p>
+                    <p className="text-sm font-bold text-gray-900">{lastBill.billId}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Date</p>
+                    <p className="text-sm font-bold text-gray-900">{lastBill.date}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {lastBill.items.map((item: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between text-sm">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-bold text-gray-800">{item.name}</p>
+                        <p className="text-xs text-gray-400">{item.qty} units × ₹{item.price.toFixed(2)}</p>
+                      </div>
+                      <p className="font-black text-gray-900">₹{item.total.toFixed(2)}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-8 rounded-2xl bg-emerald-50 p-6">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-black uppercase tracking-widest text-emerald-800">Total Paid</p>
+                    <p className="text-2xl font-black text-emerald-900">₹{lastBill.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => setShowReceipt(false)}
+                  className="mt-8 w-full rounded-2xl bg-[#0a2e2a] py-4 text-sm font-black uppercase tracking-widest text-[#bbed3b] transition-all hover:bg-[#0f423d]"
+                >
+                  Close Receipt
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
@@ -1532,23 +1750,6 @@ const ProductTable = () => {
         </div>
       )}
 
-      {/* OCR/Scan Dialog */}
-      {ocrDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl text-center">
-            <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-[#0a2e2a]">Scan Medicine</h3>
-              <button onClick={closeOcrDialog} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
-            </div>
-            <div className="aspect-video rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 flex flex-col items-center justify-center gap-3">
-              <Camera size={48} className="text-gray-300" />
-              <p className="text-sm text-gray-500">Camera module not configured.</p>
-              <p className="text-[10px] text-gray-400 max-w-xs uppercase tracking-widest font-bold">Please configure Google Vision API key</p>
-            </div>
-            <button onClick={closeOcrDialog} className="mt-6 w-full rounded-2xl bg-gray-100 py-3 text-sm font-bold text-gray-700">Close</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
