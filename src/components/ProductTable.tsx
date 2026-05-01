@@ -11,6 +11,7 @@ import {
   Package,
   Pencil,
   Plus,
+  Printer,
   Search,
   ShieldCheck,
   ShoppingCart,
@@ -49,6 +50,15 @@ type NormalizedBatch = {
 type ProductRow = {
   id?: string;
   _id?: string;
+  product_id?: string;
+  computedId?: string;
+  computedStock?: number;
+  computedPrice?: number;
+  computedPurchasePrice?: number;
+  computedEarliestExpiry?: string;
+  computedExpiryDays?: number | null;
+  computedBatches?: NormalizedBatch[];
+  computedAvailableBatches?: NormalizedBatch[];
   medicine_name?: string;
   strength?: string;
   generic_name?: string;
@@ -145,6 +155,7 @@ type BillItem = {
   key: string;
   product: ProductRow;
   qty: number;
+  saleUnit: UnitType;
   batch: NormalizedBatch | null;
   availableBatches: NormalizedBatch[];
 };
@@ -271,7 +282,6 @@ const ProductTable = () => {
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importPreviewing, setImportPreviewing] = useState(false);
   const [importSaving, setImportSaving] = useState(false);
-  const [selectedUnitType, setSelectedUnitType] = useState<UnitType>('strip');
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastBill, setLastBill] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -315,7 +325,7 @@ const ProductTable = () => {
     if (strength) return strength;
     return company || 'Medicine';
   };
-  const resolveProductKey = (p: ProductRow) => String(p.id || p._id || p['Product ID'] || p.barcodes?.[0]?.code || '');
+  const resolveProductKey = (p: ProductRow) => String(p.id || p._id || p.product_id || p['Product ID'] || p.computedId || p.barcodes?.[0]?.code || '');
   const parseExpiryTimestamp = (value?: string) => {
     if (!value) return Number.POSITIVE_INFINITY;
     const timestamp = new Date(value).getTime();
@@ -390,7 +400,12 @@ const ProductTable = () => {
     const diff = Math.ceil((new Date(expiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     return Number.isNaN(diff) ? null : diff;
   };
-  const resolveUnitLabel = (p: ProductRow) => p.base_uom || p.unit_type || p.packaging?.base_uom || p.packaging?.levels?.find((item) => item.level === 'unit')?.label || 'Unit';
+  const resolveUnitLabel = (p: ProductRow) => {
+    const base = (p.base_uom || p.unit_type || p.packaging?.base_uom || '').toLowerCase();
+    if (base === 'bottle') return 'Bottle';
+    if (base === 'vial') return 'Vial';
+    return p.packaging?.levels?.find((item) => item.level === 'unit')?.label || 'Unit';
+  };
   const pluralizeLabel = (label: string, count: number) => {
     const next = label || 'Unit';
     if (count === 1) return next;
@@ -416,13 +431,31 @@ const ProductTable = () => {
     return parts.join(' + ');
   };
   const formatStockLabel = (p: ProductRow, productId = '') => formatPackAmount(resolveStock(p, productId), p);
+  const getPackSize = (p: ProductRow, unit: UnitType) => {
+    if (unit === 'unit') return 1;
+    return Number(p.packaging?.levels?.find((item) => item.level === unit)?.to_base_units || 1);
+  };
+  const getSaleUnitLabel = (p: ProductRow, unit: UnitType) => {
+    if (unit === 'unit') return resolveUnitLabel(p);
+    return p.packaging?.levels?.find((item) => item.level === unit)?.label || (unit === 'strip' ? 'Strip' : 'Box');
+  };
+  const getSaleUnitOptions = (p: ProductRow): UnitType[] => {
+    const options: UnitType[] = ['unit'];
+    if (getPackSize(p, 'strip') > 1) options.push('strip');
+    if (getPackSize(p, 'box') > getPackSize(p, 'strip')) options.push('box');
+    return options;
+  };
   const getExpiryBadge = (days: number | null) => {
     if (days === null) return null;
     if (days < 0) return { label: 'Expired', className: 'border border-red-100 bg-red-50 text-red-700' };
     if (days <= 30) return { label: 'Expiring soon', className: 'border border-amber-100 bg-amber-50 text-amber-700' };
     return null;
   };
-  const resolveBillPrice = (item: BillItem) => Number(item.batch?.sellingPrice ?? resolvePrice(item.product));
+  const resolveBillBasePrice = (item: BillItem) => Number(item.batch?.sellingPrice ?? resolvePrice(item.product));
+  const resolveBillPrice = (item: BillItem) => resolveBillBasePrice(item) * getPackSize(item.product, item.saleUnit);
+  const getBillAvailableBaseQty = (item: BillItem) => Number(item.batch?.availableBaseUnits ?? item.product.computedStock ?? resolveStock(item.product, item.key) ?? 0);
+  const getBillAvailableQty = (item: BillItem) => Math.floor(getBillAvailableBaseQty(item) / getPackSize(item.product, item.saleUnit));
+  const getBillBaseQty = (item: BillItem) => item.qty * getPackSize(item.product, item.saleUnit);
   const getQtyDraft = (key: string, qty: number) => qtyDrafts[key] ?? String(qty);
   const handleQtyFocus = (key: string, currentValue: string, input: HTMLInputElement) => {
     if (!qtyAutoSelectUsed.current[key] && currentValue.length > 0) {
@@ -606,11 +639,12 @@ const ProductTable = () => {
   };
   const addBillItem = async (product: ProductRow, key: string) => {
     if (selected[key]) {
-      setSelected((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
+      setBillQty(key, selected[key].qty + 1);
+      return;
+    }
+    const availableBaseQty = Number(product.computedStock ?? resolveStock(product, key) ?? 0);
+    if (availableBaseQty <= 0) {
+      setMessage(`${resolveMedicineTitle(product)} is out of stock.`);
       return;
     }
     setSelected((prev) => ({
@@ -619,6 +653,7 @@ const ProductTable = () => {
         key,
         product,
         qty: 1,
+        saleUnit: 'unit',
         batch: null,
         availableBatches: [],
       },
@@ -630,8 +665,12 @@ const ProductTable = () => {
   const setBillQty = (productId: string, qty: number) => {
     setSelected((prev) => {
       if (!prev[productId]) return prev;
-      const nextQty = Math.max(0, qty);
+      const available = getBillAvailableQty(prev[productId]);
+      const nextQty = Math.min(Math.max(0, qty), Math.max(available, 0));
       setQtyDrafts((drafts) => ({ ...drafts, [productId]: String(nextQty) }));
+      if (qty > available) {
+        setMessage(`Only ${available} unit${available === 1 ? '' : 's'} available for ${resolveMedicineTitle(prev[productId].product)}.`);
+      }
       return { ...prev, [productId]: { ...prev[productId], qty: nextQty } };
     });
   };
@@ -655,13 +694,29 @@ const ProductTable = () => {
       const item = prev[itemKey];
       if (!item) return prev;
       const nextBatch = item.availableBatches.find((batch) => batch.key === batchKey) || null;
+      const nextAvailable = Math.floor(Number(nextBatch?.availableBaseUnits ?? resolveStock(item.product, item.key) ?? 0) / getPackSize(item.product, item.saleUnit));
+      const nextQty = Math.min(item.qty, nextAvailable);
+      setQtyDrafts((drafts) => ({ ...drafts, [itemKey]: String(nextQty) }));
       return {
         ...prev,
         [itemKey]: {
           ...item,
           batch: nextBatch,
+          qty: nextQty,
         },
       };
+    });
+  };
+
+  const updateBillSaleUnit = (itemKey: string, saleUnit: UnitType) => {
+    setSelected((prev) => {
+      const item = prev[itemKey];
+      if (!item) return prev;
+      const nextItem = { ...item, saleUnit };
+      const nextAvailable = Math.floor(getBillAvailableBaseQty(nextItem) / getPackSize(nextItem.product, saleUnit));
+      const nextQty = Math.min(Math.max(item.qty, 1), Math.max(nextAvailable, 0));
+      setQtyDrafts((drafts) => ({ ...drafts, [itemKey]: String(nextQty) }));
+      return { ...prev, [itemKey]: { ...nextItem, qty: nextQty } };
     });
   };
 
@@ -870,33 +925,64 @@ const ProductTable = () => {
       setMessage('Please add medicines to the bill first');
       return;
     }
+    if (selectedItems.some((item) => item.qty <= 0)) {
+      setMessage('Please keep every bill quantity above zero before confirming the sale.');
+      return;
+    }
     setBillingSaving(true);
     setMessage(null);
     try {
+      const billId = `bill-${Date.now()}`;
       const payload = {
         action: 'sale_out',
         reason_code: 'counter_sale',
         reference_type: 'bill',
-        reference_id: `bill-${Date.now()}`,
+        reference_id: billId,
         lines: selectedItems.map((item) => ({
           product_id: resolveProductKey(item.product) || item.key,
           batch_no: item.batch?.batchNo || undefined,
-          qty: { unit: item.qty, strip: 0, box: 0 },
+          qty: {
+            unit: item.saleUnit === 'unit' ? item.qty : 0,
+            strip: item.saleUnit === 'strip' ? item.qty : 0,
+            box: item.saleUnit === 'box' ? item.qty : 0,
+          },
           reason_code: 'counter_sale',
         })),
       };
-      await applyStockActions(payload, `bill-${Date.now()}`);
+      const stockResult = await applyStockActions(payload, `counter-sale:${billId}`);
       
       const billData = {
         billId: payload.reference_id,
-        items: selectedItems.map(item => ({
-          name: resolveMedicineTitle(item.product),
-          qty: item.qty,
-          price: resolveBillPrice(item),
-          total: item.qty * resolveBillPrice(item)
-        })),
+        items: selectedItems.map(item => {
+          const price = resolveBillPrice(item);
+          const gstPercent = Number(item.product.gst_percentage || 12);
+          const basePrice = price / (1 + gstPercent / 100);
+          const gstAmount = price - basePrice;
+          
+          return {
+            name: resolveMedicineTitle(item.product),
+            hsn: item.product.hsn_code || '3004',
+            qty: item.qty,
+            price: price,
+            basePrice: basePrice,
+            gstPercent: gstPercent,
+            gstAmount: gstAmount * item.qty,
+            total: item.qty * price,
+            batchNo: item.batch?.batchNo || null,
+            saleUnit: getSaleUnitLabel(item.product, item.saleUnit),
+            baseQty: getBillBaseQty(item),
+          };
+        }),
         total: billTotal,
-        date: new Date().toLocaleString()
+        taxTotal: selectedItems.reduce((sum, item) => {
+          const price = resolveBillPrice(item);
+          const gstPercent = Number(item.product.gst_percentage || 12);
+          const basePrice = price / (1 + gstPercent / 100);
+          return sum + (price - basePrice) * item.qty;
+        }, 0),
+        date: new Date().toLocaleString(),
+        stockUpdated: stockResult?.status === 'ok',
+        stockMovements: Array.isArray(stockResult?.results) ? stockResult.results.length : selectedItems.length,
       };
       
       setLastBill(billData);
@@ -992,6 +1078,41 @@ const ProductTable = () => {
           <div className="mt-4 flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
             <AlertCircle size={16} />
             {message}
+          </div>
+        )}
+
+        {selectedItems.length > 0 && (
+          <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Selected Medicines</p>
+              <button
+                type="button"
+                onClick={() => setCartOpen(true)}
+                className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#0a2e2a] shadow-sm ring-1 ring-emerald-100"
+              >
+                Review Bill
+              </button>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {selectedItems.map((item) => (
+                <div key={item.key} className="flex min-w-[220px] items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-emerald-100">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-black text-[#061412]">{resolveMedicineTitle(item.product)}</p>
+                    <p className="mt-0.5 text-[10px] font-semibold text-gray-400">
+                      {item.qty} {pluralizeLabel(getSaleUnitLabel(item.product, item.saleUnit), item.qty)} &middot; {getBillBaseQty(item)} base units
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeBillItem(item.key)}
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-rose-50 text-rose-500"
+                    title="Remove from bill"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </section>
@@ -1221,6 +1342,23 @@ const ProductTable = () => {
                           <span className="text-xs font-bold text-emerald-900">
                             Line Total: ₹{(selected[id].qty * resolveBillPrice(selected[id])).toFixed(2)}
                           </span>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {getSaleUnitOptions(product).map((unit) => (
+                              <button
+                                key={unit}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateBillSaleUnit(id, unit);
+                                }}
+                                className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${
+                                  selected[id].saleUnit === unit ? 'bg-[#0a2e2a] text-[#bbed3b]' : 'bg-white text-emerald-700 ring-1 ring-emerald-100'
+                                }`}
+                              >
+                                {getSaleUnitLabel(product, unit)}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-1 rounded-lg border border-gray-100 bg-gray-50/50 p-1">
@@ -1391,6 +1529,7 @@ const ProductTable = () => {
                     const id = item.key;
                     const price = resolveBillPrice(item);
                     const lineTotal = item.qty * price;
+                    const availableQty = getBillAvailableQty(item);
                     return (
                       <div key={id} className="group relative rounded-xl border border-gray-100 bg-white p-3 shadow-sm transition-all hover:border-emerald-100 hover:shadow-md">
                         {/* Remove button */}
@@ -1405,6 +1544,25 @@ const ProductTable = () => {
                         <div className="pr-5">
                           <p className="truncate text-xs font-bold leading-tight text-[#061412]">{resolveMedicineTitle(item.product)}</p>
                           <p className="mt-0.5 text-[10px] text-gray-400">₹{price.toFixed(2)} / unit</p>
+                          <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-emerald-700">
+                            Available: {availableQty} {pluralizeLabel(getSaleUnitLabel(item.product, item.saleUnit), availableQty)}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {getSaleUnitOptions(item.product).map((unit) => (
+                              <button
+                                key={unit}
+                                type="button"
+                                onClick={() => updateBillSaleUnit(id, unit)}
+                                className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider transition ${
+                                  item.saleUnit === unit
+                                    ? 'bg-[#0a2e2a] text-[#bbed3b]'
+                                    : 'bg-gray-50 text-gray-500 ring-1 ring-gray-100 hover:bg-gray-100'
+                                }`}
+                              >
+                                {getSaleUnitLabel(item.product, unit)}
+                              </button>
+                            ))}
+                          </div>
                         </div>
 
                         {/* Qty controls + line total */}
@@ -1466,7 +1624,7 @@ const ProductTable = () => {
                 disabled={billingSaving}
                 className="mt-2.5 w-full rounded-xl bg-[#bbed3b] px-4 py-3 text-xs font-black uppercase tracking-widest text-[#0a2e2a] transition-all hover:scale-[1.01] hover:bg-[#c8f74d] active:scale-95 disabled:opacity-70"
               >
-                {billingSaving ? <Loader2 className="mx-auto animate-spin" size={16} /> : 'Process Bill'}
+                {billingSaving ? <Loader2 className="mx-auto animate-spin" size={16} /> : 'Confirm Sale & Update Stock'}
               </button>
             </div>
           </div>
@@ -1600,10 +1758,11 @@ const ProductTable = () => {
                     <TrendingUp className="text-emerald-600" size={14} />
                     <h3 className="text-[10px] font-black uppercase tracking-widest text-[#0a2e2a]">Pricing & Tax</h3>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-4 gap-3">
                     <Field type="number" required label="Buy Rate" value={String(form.purchase_price)} onChange={v => setForm({ ...form, purchase_price: Number(v) })} />
                     <Field type="number" required label="Sell Price" value={String(form.selling_price)} onChange={v => setForm({ ...form, selling_price: Number(v) })} />
                     <SelectField label="GST %" value={String(form.gst_percentage)} onChange={v => setForm({ ...form, gst_percentage: Number(v) })} options={['0', '5', '12', '18', '28']} />
+                    <Field label="HSN Code" value={form.hsn_code} onChange={v => setForm({ ...form, hsn_code: v })} />
                   </div>
                 </div>
 
@@ -1693,63 +1852,112 @@ const ProductTable = () => {
 
       {/* Real-time Receipt Modal */}
       {showReceipt && lastBill && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
-          <div className="w-full max-w-md animate-in zoom-in-95 duration-300">
-            <div className="overflow-hidden rounded-[32px] bg-white shadow-2xl">
-              <div className="bg-[#0a2e2a] p-8 text-center text-white">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20">
-                  <Check size={32} className="text-emerald-400" />
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 print:p-0 print:bg-white print:backdrop-blur-none">
+          <div className="w-full max-w-lg animate-in zoom-in-95 duration-300 print:max-w-none print:w-[80mm] print:shadow-none print:animate-none">
+            <div className="max-h-[92vh] overflow-hidden rounded-3xl bg-white shadow-2xl print:max-h-none print:rounded-none">
+              {/* Header - Hidden on print for thermal look */}
+              <div className="bg-[#0a2e2a] px-6 py-5 text-white print:hidden">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/20">
+                    <Check size={26} className="text-emerald-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#bbed3b]">Counter Sale Confirmed</p>
+                    <h3 className="mt-1 text-2xl font-black tracking-tight">Sale Completed</h3>
+                    <p className="mt-1 text-sm text-white/60">Inventory updated and receipt is ready.</p>
+                  </div>
                 </div>
-                <h3 className="text-2xl font-black tracking-tight">Bill Generated</h3>
-                <p className="mt-1 text-sm text-white/60">Stock updated in real-time</p>
+              </div>
+
+              {/* Thermal Print Header (Only visible on print) */}
+              <div className="hidden print:block text-center pt-4 pb-2 border-b border-black">
+                <h2 className="text-lg font-black uppercase">SANJEEVANI PHARMACY</h2>
+                <p className="text-[10px] font-bold">Health Care at Your Fingertips</p>
+                <p className="text-[9px] mt-1">Reg No: SANJ-RX-77420</p>
               </div>
               
-              <div className="p-8">
-                <div className="mb-6 flex items-center justify-between border-b border-dashed border-gray-200 pb-4">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Order ID</p>
-                    <p className="text-sm font-bold text-gray-900">{lastBill.billId}</p>
+              <div className="overflow-y-auto p-6 print:overflow-visible print:p-4">
+                <div className="mb-4 grid grid-cols-3 gap-2 print:hidden">
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Stock</p>
+                    <p className="mt-1 text-sm font-black text-[#0a2e2a]">{lastBill.stockUpdated ? 'Updated' : 'Pending'}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Date</p>
-                    <p className="text-sm font-bold text-gray-900">{lastBill.date}</p>
+                  <div className="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">Items</p>
+                    <p className="mt-1 text-sm font-black text-gray-900">{lastBill.items.length}</p>
+                  </div>
+                  <div className="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">Ledger</p>
+                    <p className="mt-1 text-sm font-black text-gray-900">{lastBill.stockMovements}</p>
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="mb-6 flex items-center justify-between border-b border-dashed border-gray-200 pb-4 print:border-black print:mb-4 print:pb-2">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 print:text-black">Invoice #</p>
+                    <p className="text-sm font-bold text-gray-900 print:text-[10px]">{lastBill.billId}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 print:text-black">Date</p>
+                    <p className="text-sm font-bold text-gray-900 print:text-[10px]">{lastBill.date}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4 print:space-y-2">
+                  <div className="hidden print:grid grid-cols-12 text-[8px] font-black uppercase border-b border-black pb-1 mb-1">
+                    <span className="col-span-5">Item</span>
+                    <span className="col-span-2">HSN</span>
+                    <span className="col-span-2 text-center">Qty</span>
+                    <span className="col-span-3 text-right">Amount</span>
+                  </div>
                   {lastBill.items.map((item: any, i: number) => (
-                    <div key={i} className="flex items-center justify-between text-sm">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-bold text-gray-800">{item.name}</p>
-                        <p className="text-xs text-gray-400">{item.qty} units × ₹{item.price.toFixed(2)}</p>
+                    <div key={i} className="flex items-center justify-between text-sm print:grid print:grid-cols-12 print:text-[9px]">
+                      <div className="min-w-0 flex-1 print:col-span-5">
+                        <p className="truncate font-bold text-gray-800 print:text-[9px]">{item.name}</p>
+                        <p className="text-xs text-gray-400 print:hidden">{item.qty} units × ₹{item.price.toFixed(2)}</p>
                       </div>
-                      <p className="font-black text-gray-900">₹{item.total.toFixed(2)}</p>
+                      <span className="hidden print:block col-span-2 text-center text-gray-500">{item.hsn}</span>
+                      <span className="hidden print:block col-span-2 text-center font-bold">{item.qty}</span>
+                      <p className="font-black text-gray-900 print:col-span-3 print:text-right">₹{item.total.toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
 
-                <div className="mt-8 rounded-2xl bg-emerald-50 p-6">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-black uppercase tracking-widest text-emerald-800">Total Paid</p>
-                    <p className="text-2xl font-black text-emerald-900">₹{lastBill.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                <div className="mt-8 space-y-2 border-t border-gray-100 pt-4 print:mt-4 print:pt-2 print:border-black print:border-t-2">
+                  <div className="flex justify-between text-xs print:text-[9px]">
+                    <span className="text-gray-500 font-bold uppercase tracking-widest print:text-black">Taxable Amount</span>
+                    <span className="font-bold">₹{(lastBill.total - lastBill.taxTotal).toFixed(2)}</span>
                   </div>
-                  <div className="mt-2 flex items-center justify-between border-t border-emerald-200/50 pt-2">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Estimated Profit</p>
-                    <p className="text-xs font-black text-emerald-700">+ ₹{(lastBill.total * 0.15).toFixed(2)} (Avg 15%)</p>
+                  <div className="flex justify-between text-xs print:text-[9px]">
+                    <span className="text-gray-500 font-bold uppercase tracking-widest print:text-black">GST (CGST+SGST)</span>
+                    <span className="font-bold">₹{lastBill.taxTotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-2xl bg-[#0a2e2a] p-6 text-white print:bg-white print:text-black print:p-2 print:border-t print:border-black print:rounded-none">
+                    <p className="text-xs font-black uppercase tracking-widest print:text-[10px]">Grand Total</p>
+                    <p className="text-2xl font-black print:text-base">₹{lastBill.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-gray-50 py-2">
-                  <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Inventory Sync Complete</span>
+                <div className="mt-6 grid grid-cols-2 gap-3 print:hidden">
+                   <button 
+                    onClick={() => window.print()}
+                    className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 py-4 text-xs font-black uppercase tracking-widest text-emerald-700 transition-all hover:bg-emerald-100"
+                  >
+                    <Printer size={18} /> Print Receipt
+                  </button>
+                  <button 
+                    onClick={() => setShowReceipt(false)}
+                    className="rounded-2xl bg-[#0a2e2a] py-4 text-xs font-black uppercase tracking-widest text-[#bbed3b] transition-all hover:bg-[#0f423d]"
+                  >
+                    Close & New Bill
+                  </button>
                 </div>
 
-                <button 
-                  onClick={() => setShowReceipt(false)}
-                  className="mt-8 w-full rounded-2xl bg-[#0a2e2a] py-4 text-sm font-black uppercase tracking-widest text-[#bbed3b] transition-all hover:bg-[#0f423d]"
-                >
-                  Close Receipt
-                </button>
+                <div className="hidden print:block text-center mt-6 pt-4 border-t border-dashed border-black">
+                    <p className="text-[10px] font-black uppercase">THANK YOU</p>
+                    <p className="text-[8px] font-bold text-gray-500">Visit again for all your medical needs</p>
+                    <p className="text-[7px] mt-2 opacity-50 font-mono">Generated by SanjeevaniRxAI Console</p>
+                </div>
               </div>
             </div>
           </div>

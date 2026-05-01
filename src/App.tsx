@@ -12,6 +12,7 @@ import AIInsights from './pages/AIInsights';
 import AuthCallback from './pages/AuthCallback';
 import Onboarding from './pages/Onboarding';
 import Plans from './pages/Plans';
+import Financials from './pages/Financials';
 import MainLayout from './components/MainLayout';
 import { AuthProvider } from './context/AuthContext';
 
@@ -106,15 +107,12 @@ function App() {
                 <Route index element={<Overview />} />
                 <Route path="products" element={<Products />} />
                 <Route path="orders" element={<Orders />} />
-                <Route path="sales" element={<Sales />} />
+                <Route path="financials" element={<Financials />} />
                 <Route path="customers" element={<Customers />} />
-                <Route path="payments" element={<Payments />} />
                 <Route path="plans" element={<Plans />} />
                 <Route path="ai-insights" element={<AIInsights />} />
               </Route>
             </Route>
-            
-            {/* Catch-all */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>

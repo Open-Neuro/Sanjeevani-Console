@@ -31,9 +31,8 @@ const NAV_MAIN = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Overview' },
     { to: '/dashboard/products', icon: Box, label: 'Products' },
     { to: '/dashboard/orders', icon: ShoppingCart, label: 'Orders' },
-    { to: '/dashboard/sales', icon: LineChart, label: 'Sales' },
+    { to: '/dashboard/financials', icon: LineChart, label: 'Financials' },
     { to: '/dashboard/customers', icon: Users, label: 'Customers' },
-    { to: '/dashboard/payments', icon: CreditCard, label: 'Payments' },
     { to: '/dashboard/plans', icon: Gem, label: 'Our Plan' },
 ];
 
