@@ -284,6 +284,8 @@ const ProductTable = () => {
   const [importSaving, setImportSaving] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastBill, setLastBill] = useState<any>(null);
+  const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+  const selectedSummaryOpen = false;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const qtyAutoSelectUsed = useRef<Record<string, boolean>>({});
@@ -534,6 +536,9 @@ const ProductTable = () => {
     const searchTerms = search.toLowerCase().trim().split(/\s+/).filter(t => t.length > 0);
 
     let next = processedProducts.filter((p) => {
+      const id = p.computedId || resolveProductKey(p);
+      if (showSelectedOnly && !selected[id]) return false;
+
       // Apply filters first (Low Stock / Expiry)
       if (filter === 'low') {
         if (!(p.computedStock > 0 && p.computedStock < 20)) return false;
@@ -570,7 +575,7 @@ const ProductTable = () => {
       next = [...next].sort((a, b) => (a.computedExpiryDays ?? 9999) - (b.computedExpiryDays ?? 9999));
     }
     return next;
-  }, [processedProducts, filter, search]);
+  }, [processedProducts, filter, search, selected, showSelectedOnly]);
 
   // Barcode Auto-Add Logic
   useEffect(() => {
@@ -679,6 +684,7 @@ const ProductTable = () => {
     setSelected((prev) => {
       const next = { ...prev };
       delete next[productId];
+      if (Object.keys(next).length === 0) setShowSelectedOnly(false);
       return next;
     });
     setQtyDrafts((prev) => {
@@ -1082,12 +1088,24 @@ const ProductTable = () => {
         )}
 
         {selectedItems.length > 0 && (
-          <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-3">
+          <div
+            className="mt-4 cursor-pointer rounded-2xl border border-emerald-100 bg-emerald-50/50 p-3 transition hover:border-emerald-200 hover:bg-emerald-50"
+            onClick={() => {
+              setShowSelectedOnly(true);
+              setSearch('');
+              setFilter('all');
+            }}
+          >
             <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Selected Medicines</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
+                {showSelectedOnly ? 'Showing Selected Medicines' : 'Selected Medicines'}
+              </p>
               <button
                 type="button"
-                onClick={() => setCartOpen(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCartOpen(true);
+                }}
                 className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#0a2e2a] shadow-sm ring-1 ring-emerald-100"
               >
                 Review Bill
@@ -1104,7 +1122,10 @@ const ProductTable = () => {
                   </div>
                   <button
                     type="button"
-                    onClick={() => removeBillItem(item.key)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeBillItem(item.key);
+                    }}
                     className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-rose-50 text-rose-500"
                     title="Remove from bill"
                   >
@@ -1113,6 +1134,26 @@ const ProductTable = () => {
                 </div>
               ))}
             </div>
+            {selectedSummaryOpen && (
+              <div className="mt-3 space-y-2 border-t border-emerald-100 pt-3">
+                {selectedItems.map((item) => (
+                  <div key={`expanded-${item.key}`} className="flex flex-col gap-2 rounded-xl bg-white p-3 shadow-sm ring-1 ring-emerald-100 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-[#061412]">{resolveMedicineTitle(item.product)}</p>
+                      <p className="mt-0.5 text-[11px] font-semibold text-gray-400">
+                        {item.qty} {pluralizeLabel(getSaleUnitLabel(item.product, item.saleUnit), item.qty)} x ₹{resolveBillPrice(item).toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <button type="button" onClick={() => setBillQty(item.key, item.qty - 1)} className="grid h-8 w-8 place-items-center rounded-lg bg-gray-50 text-gray-600 ring-1 ring-gray-100"><Minus size={14} /></button>
+                      <span className="w-8 text-center text-sm font-black text-gray-900">{item.qty}</span>
+                      <button type="button" onClick={() => setBillQty(item.key, item.qty + 1)} className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"><Plus size={14} /></button>
+                      <button type="button" onClick={() => removeBillItem(item.key)} className="grid h-8 w-8 place-items-center rounded-lg bg-rose-50 text-rose-500"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -1121,9 +1162,20 @@ const ProductTable = () => {
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-400">Medicines</h3>
-            <p className="text-sm text-gray-500">Tap a row to add it to the cart.</p>
+            <p className="text-sm text-gray-500">{showSelectedOnly ? 'Showing only medicines selected for this bill.' : 'Tap a row to add it to the cart.'}</p>
           </div>
-          <span className="rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-600">{filteredProducts.length} shown</span>
+          <div className="flex items-center gap-2">
+            {showSelectedOnly && (
+              <button
+                type="button"
+                onClick={() => setShowSelectedOnly(false)}
+                className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-700"
+              >
+                Show All
+              </button>
+            )}
+            <span className="rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-600">{filteredProducts.length} shown</span>
+          </div>
         </div>
 
         {recentlyAdded.length > 0 && (
@@ -1852,20 +1904,25 @@ const ProductTable = () => {
 
       {/* Real-time Receipt Modal */}
       {showReceipt && lastBill && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 print:p-0 print:bg-white print:backdrop-blur-none">
-          <div className="w-full max-w-lg animate-in zoom-in-95 duration-300 print:max-w-none print:w-[80mm] print:shadow-none print:animate-none">
-            <div className="max-h-[92vh] overflow-hidden rounded-3xl bg-white shadow-2xl print:max-h-none print:rounded-none">
+        <div className="fixed inset-0 z-[70] overflow-y-auto bg-[#f8faf9] print:bg-white">
+          <div className="mx-auto min-h-screen w-full max-w-7xl animate-in fade-in duration-200 print:min-h-0 print:max-w-none print:w-[80mm] print:shadow-none print:animate-none">
+            <div className="min-h-screen bg-white shadow-sm print:min-h-0 print:rounded-none print:shadow-none">
               {/* Header - Hidden on print for thermal look */}
-              <div className="bg-[#0a2e2a] px-6 py-5 text-white print:hidden">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/20">
-                    <Check size={26} className="text-emerald-400" />
+              <div className="sticky top-0 z-10 bg-[#0a2e2a] px-6 py-5 text-white print:hidden">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/20">
+                      <Check size={26} className="text-emerald-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#bbed3b]">Counter Sale Confirmed</p>
+                      <h3 className="mt-1 text-2xl font-black tracking-tight">Bill Ready</h3>
+                      <p className="mt-1 text-sm text-white/60">Inventory updated and receipt is ready.</p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#bbed3b]">Counter Sale Confirmed</p>
-                    <h3 className="mt-1 text-2xl font-black tracking-tight">Sale Completed</h3>
-                    <p className="mt-1 text-sm text-white/60">Inventory updated and receipt is ready.</p>
-                  </div>
+                  <button onClick={() => setShowReceipt(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20">
+                    <X size={18} />
+                  </button>
                 </div>
               </div>
 
@@ -1876,7 +1933,7 @@ const ProductTable = () => {
                 <p className="text-[9px] mt-1">Reg No: SANJ-RX-77420</p>
               </div>
               
-              <div className="overflow-y-auto p-6 print:overflow-visible print:p-4">
+              <div className="p-6 lg:pr-[420px] print:p-4">
                 <div className="mb-4 grid grid-cols-3 gap-2 print:hidden">
                   <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2">
                     <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Stock</p>
@@ -1923,7 +1980,7 @@ const ProductTable = () => {
                   ))}
                 </div>
 
-                <div className="mt-8 space-y-2 border-t border-gray-100 pt-4 print:mt-4 print:pt-2 print:border-black print:border-t-2">
+                <div className="mt-8 space-y-2 border-t border-gray-100 bg-white pt-4 lg:fixed lg:right-6 lg:top-28 lg:mt-0 lg:w-[360px] lg:rounded-3xl lg:border lg:p-5 lg:shadow-xl print:static print:mt-4 print:w-auto print:rounded-none print:border-black print:border-t-2 print:p-0 print:pt-2 print:shadow-none">
                   <div className="flex justify-between text-xs print:text-[9px]">
                     <span className="text-gray-500 font-bold uppercase tracking-widest print:text-black">Taxable Amount</span>
                     <span className="font-bold">₹{(lastBill.total - lastBill.taxTotal).toFixed(2)}</span>
@@ -1938,7 +1995,7 @@ const ProductTable = () => {
                   </div>
                 </div>
 
-                <div className="mt-6 grid grid-cols-2 gap-3 print:hidden">
+                <div className="mt-6 grid grid-cols-2 gap-3 lg:fixed lg:right-6 lg:top-[470px] lg:w-[360px] print:hidden">
                    <button 
                     onClick={() => window.print()}
                     className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 py-4 text-xs font-black uppercase tracking-widest text-emerald-700 transition-all hover:bg-emerald-100"
