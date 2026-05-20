@@ -1,6 +1,6 @@
 # 🏥 ShivanyaRx AI - Frontend Web App 🌟
 
-Welcome to the frontend application for **ShivanyaRx AI**! This is the user interface where pharmacists and staff can log in, view insights, manage inventory, and monitor patients.
+Welcome to the frontend application for **ShivanyaRx **! This is the user interface where pharmacists and staff can log in, view insights, manage inventory, and monitor patients.
 
 This project is built with **React**, **TypeScript**, and **Vite**, offering a lightning-fast development experience! ⚡
 
